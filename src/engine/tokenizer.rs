@@ -1,11 +1,66 @@
-use crate::context::ExecutionContext;
+use std::any::{Any, TypeId};
+
+use crate::{
+    context::{ExecutionContext, registry::CommandRegistry},
+    models::Value,
+};
 use anyhow::{Result, bail};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Var(String),
-    Literal(String),
+    Literal(LiteralValue),
     Func(String, Vec<Expr>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LiteralValue {
+    String(String),
+    Int(i64),
+    Float(f64),
+}
+
+impl std::fmt::Display for LiteralValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LiteralValue::String(s) => write!(f, "{}", s),
+            LiteralValue::Int(i) => write!(f, "{}", i),
+            LiteralValue::Float(fl) => write!(f, "{}", fl),
+        }
+    }
+}
+
+impl LiteralValue {
+    /// Attempts to coerce a dynamically typed value into a standard literal
+    pub fn from_any(any: &dyn Any) -> Option<Self> {
+        let id = any.type_id();
+
+        match id {
+            // Your parser integers
+            _ if id == TypeId::of::<i64>() => {
+                Some(LiteralValue::Int(*any.downcast_ref::<i64>().unwrap()))
+            }
+
+            // Your native function returns
+            _ if id == TypeId::of::<u32>() => {
+                Some(LiteralValue::Int(*any.downcast_ref::<u32>().unwrap() as i64))
+            }
+            _ if id == TypeId::of::<i32>() => {
+                Some(LiteralValue::Int(*any.downcast_ref::<i32>().unwrap() as i64))
+            }
+
+            // Floats and Strings
+            _ if id == TypeId::of::<f64>() => {
+                Some(LiteralValue::Float(*any.downcast_ref::<f64>().unwrap()))
+            }
+            _ if id == TypeId::of::<String>() => Some(LiteralValue::String(
+                any.downcast_ref::<String>().unwrap().clone(),
+            )),
+
+            // Unprintable or unknown type
+            _ => None,
+        }
+    }
 }
 
 impl Expr {
@@ -42,7 +97,13 @@ impl Expr {
 
             return Ok(Expr::Func(func_name, dependents));
         }
-        return Ok(Expr::Literal(trimmed.to_string()));
+        if let Ok(num) = trimmed.parse::<i64>() {
+            Ok(Expr::Literal(LiteralValue::Int(num)))
+        } else if let Ok(float) = trimmed.parse::<f64>() {
+            Ok(Expr::Literal(LiteralValue::Float(float)))
+        } else {
+            Ok(Expr::Literal(LiteralValue::String(trimmed.to_string())))
+        }
     }
 
     fn split_args(args_str: &str) -> Vec<&str> {
@@ -69,17 +130,28 @@ impl Expr {
         args
     }
 
-    /// Recursively evaluate the AST against the execution context
-    pub fn resolve(&self, context: &ExecutionContext) -> Result<String> {
+    pub fn resolve(&self, context: &ExecutionContext, registry: &CommandRegistry) -> Result<Value> {
         match self {
-            Expr::Var(name) => context.get_var(name),
-            Expr::Literal(value) => Ok(value.clone()),
+            Expr::Var(name) => {
+                let var_str = context.get_var(name)?;
+                Ok(Value::String(var_str))
+            }
+            Expr::Literal(lit_val) => {
+                // Your parser directly maps to our main Value types now!
+                match lit_val {
+                    LiteralValue::Int(n) => Ok(Value::Int(*n)),
+                    LiteralValue::Float(f) => Ok(Value::Float(*f)),
+                    LiteralValue::String(s) => Ok(Value::String(s.clone())),
+                }
+            }
             Expr::Func(name, dependents) => {
                 let mut args = Vec::with_capacity(dependents.len());
                 for dep in dependents {
-                    args.push(dep.resolve(context)?);
+                    args.push(dep.resolve(context, registry)?);
                 }
-                context.execute_func(name, args)
+
+                // Pass the flat slice of values directly—no pointer-mapping loops!
+                registry.execute_func(context, name, &args)
             }
         }
     }

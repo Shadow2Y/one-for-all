@@ -1,15 +1,12 @@
 use anyhow::Result;
 
-use crate::{config, context, engine::executor::execute_command};
+use crate::{context, engine::executor::execute_command, models::Value};
 
 mod executor;
 pub mod tokenizer;
 
-pub fn handle_command(cmd: &str, args: &[String]) -> Result<String> {
-    find_base_command(cmd, args);
-    context::get();
-    config::get();
-    execute_command(context::get(), args)
+pub fn handle_command(cmd: &str, args: &[String]) -> Result<Value> {
+    execute_command(context::get_context(), context::get_registry(), args)
 }
 
 fn find_base_command(cmd: &str, args: &[String]) -> String {

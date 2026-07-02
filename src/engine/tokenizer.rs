@@ -1,54 +1,86 @@
-use std::ops::Range;
+use crate::context::ExecutionContext;
+use anyhow::{Result, bail};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token<'a> {
-    Text(&'a str),
-    Reference { name: &'a str, span: Range<usize> },
+pub enum Expr {
+    Var(String),
+    Literal(String),
+    Func(String, Vec<Expr>),
 }
 
-pub fn tokenize(input: &str) -> Vec<Token<'_>> {
-    let mut tokens = Vec::new();
-    let mut start = 0;
-    let bytes = input.as_bytes();
-    let mut i = 0;
+impl Expr {
+    /// Parse a custom string like "!add(!sub(#a,#b), #c)" into the AST
+    pub fn parse(input: &str) -> Result<Self> {
+        let trimmed = input.trim();
 
-    while i < bytes.len() {
-        if bytes[i] == b'#' {
-            if start < i {
-                tokens.push(Token::Text(&input[start..i]));
+        if let Some(var_name) = trimmed.strip_prefix('#') {
+            if var_name.is_empty() {
+                bail!("var_name is empty")
+            }
+            return Ok(Expr::Var(var_name.to_string()));
+        }
+
+        if let Some(func_content) = trimmed.strip_prefix('!') {
+            let paren_pos = func_content
+                .find('(')
+                .ok_or_else(|| anyhow::anyhow!("Function missing opening parenthesis"))?;
+
+            let func_name = func_content[..paren_pos].trim().to_string();
+
+            let close_paren = func_content
+                .rfind(')')
+                .ok_or_else(|| anyhow::anyhow!("Function missing closing parenthesis"))?;
+
+            let args_str = &func_content[paren_pos + 1..close_paren];
+
+            let mut dependents = Vec::new();
+            if !args_str.trim().is_empty() {
+                for arg in Self::split_args(args_str) {
+                    dependents.push(Self::parse(arg.trim())?);
+                }
             }
 
-            let begin = i;
-            i += 1;
+            return Ok(Expr::Func(func_name, dependents));
+        }
+        return Ok(Expr::Literal(trimmed.to_string()));
+    }
 
-            if i >= bytes.len() || !(bytes[i].is_ascii_alphabetic() || bytes[i] == b'_') {
-                tokens.push(Token::Text(&input[begin..begin + 1]));
-                start = begin + 1;
-                continue;
+    fn split_args(args_str: &str) -> Vec<&str> {
+        let mut args = Vec::new();
+        let mut current_arg_start = 0;
+        let mut paren_depth = 0;
+
+        for (i, ch) in args_str.char_indices() {
+            match ch {
+                '(' => paren_depth += 1,
+                ')' => paren_depth -= 1,
+                ',' if paren_depth == 0 => {
+                    args.push(&args_str[current_arg_start..i]);
+                    current_arg_start = i + 1;
+                }
+                _ => {}
             }
+        }
 
-            let name_start = i;
+        if current_arg_start < args_str.len() {
+            args.push(&args_str[current_arg_start..]);
+        }
 
-            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
-                i += 1;
+        args
+    }
+
+    /// Recursively evaluate the AST against the execution context
+    pub fn resolve(&self, context: &ExecutionContext) -> Result<String> {
+        match self {
+            Expr::Var(name) => context.get_var(name),
+            Expr::Literal(value) => Ok(value.clone()),
+            Expr::Func(name, dependents) => {
+                let mut args = Vec::with_capacity(dependents.len());
+                for dep in dependents {
+                    args.push(dep.resolve(context)?);
+                }
+                context.execute_func(name, args)
             }
-
-            let name = &input[name_start..i];
-
-            tokens.push(Token::Reference {
-                name,
-                span: begin..i,
-            });
-
-            start = i;
-        } else {
-            i += 1;
         }
     }
-
-    if start < input.len() {
-        tokens.push(Token::Text(&input[start..]));
-    }
-
-    tokens
 }

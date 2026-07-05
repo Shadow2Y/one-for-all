@@ -1,10 +1,17 @@
-use std::any::{Any, TypeId};
-
 use crate::{
-    context::{ExecutionContext, registry::CommandRegistry},
-    models::Value,
+    context::registry::CommandRegistry,
+    models::{Value, value::LiteralValue},
 };
 use anyhow::{Result, bail};
+
+pub enum TemplatePart {
+    Text(String),
+    Expr(Expr),
+}
+
+pub struct Template {
+    pub parts: Vec<TemplatePart>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -13,58 +20,113 @@ pub enum Expr {
     Func(String, Vec<Expr>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum LiteralValue {
-    String(String),
-    Int(i64),
-    Float(f64),
-}
+impl Template {
+    pub fn parse(input: &str) -> Result<Self> {
+        let mut parts = Vec::new();
+        let mut pos = 0;
+        let bytes = input.as_bytes();
 
-impl std::fmt::Display for LiteralValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LiteralValue::String(s) => write!(f, "{}", s),
-            LiteralValue::Int(i) => write!(f, "{}", i),
-            LiteralValue::Float(fl) => write!(f, "{}", fl),
+        while pos < input.len() {
+            // Look for next expression start (! or #)
+            if let Some(expr_pos) = input[pos..].find(|c| c == '!' || c == '#') {
+                let expr_pos = pos + expr_pos;
+
+                // Check if it's actually an expression
+                if Self::is_valid_expr_start(&input[expr_pos..]) {
+                    // Collect text before expression
+                    if expr_pos > pos {
+                        parts.push(TemplatePart::Text(input[pos..expr_pos].to_string()));
+                    }
+
+                    // Find expression end
+                    let expr_end = Self::find_expr_end(&input[expr_pos..]);
+                    let expr_str = &input[expr_pos..expr_pos + expr_end];
+                    parts.push(TemplatePart::Expr(Expr::parse(expr_str)?));
+
+                    pos = expr_pos + expr_end;
+                } else {
+                    pos = expr_pos + 1;
+                }
+            } else {
+                // No more expressions, consume rest as text
+                if pos < input.len() {
+                    parts.push(TemplatePart::Text(input[pos..].to_string()));
+                }
+                break;
+            }
         }
+
+        Ok(Template { parts })
+    }
+
+    fn is_valid_expr_start(s: &str) -> bool {
+        (s.starts_with('!') && s[1..].contains('('))
+            || (s.starts_with('#')
+                && s.len() > 1
+                && s[1..].chars().next().unwrap().is_alphanumeric())
+    }
+
+    fn find_expr_end(s: &str) -> usize {
+        let mut depth = 0;
+        let mut found_start = false;
+
+        for (i, ch) in s.char_indices() {
+            if i == 0 {
+                continue;
+            }
+            match ch {
+                '(' => {
+                    depth += 1;
+                    found_start = true;
+                }
+                ')' => {
+                    depth -= 1;
+                    if found_start && depth == 0 {
+                        return i + 1;
+                    }
+                }
+                c if !c.is_alphanumeric() && c != '_' && depth == 0 && found_start => return i,
+                _ => {}
+            }
+        }
+        s.len()
     }
 }
 
-impl LiteralValue {
-    /// Attempts to coerce a dynamically typed value into a standard literal
-    pub fn from_any(any: &dyn Any) -> Option<Self> {
-        let id = any.type_id();
+fn is_expr_start(s: &str) -> bool {
+    s.starts_with('!') && s[1..].find('(').is_some()
+        || s.starts_with('#')
+            && s[1..]
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_alphanumeric() || c == '_')
+}
 
-        match id {
-            // Your parser integers
-            _ if id == TypeId::of::<i64>() => {
-                Some(LiteralValue::Int(*any.downcast_ref::<i64>().unwrap()))
-            }
+fn find_expr_end(s: &str) -> usize {
+    let mut depth = 0;
+    let mut in_expr = false;
 
-            // Your native function returns
-            _ if id == TypeId::of::<u32>() => {
-                Some(LiteralValue::Int(*any.downcast_ref::<u32>().unwrap() as i64))
+    for (i, ch) in s.char_indices() {
+        if i == 0 {
+            in_expr = true;
+            continue;
+        }
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 && in_expr {
+                    return i + 1;
+                }
             }
-            _ if id == TypeId::of::<i32>() => {
-                Some(LiteralValue::Int(*any.downcast_ref::<i32>().unwrap() as i64))
-            }
-
-            // Floats and Strings
-            _ if id == TypeId::of::<f64>() => {
-                Some(LiteralValue::Float(*any.downcast_ref::<f64>().unwrap()))
-            }
-            _ if id == TypeId::of::<String>() => Some(LiteralValue::String(
-                any.downcast_ref::<String>().unwrap().clone(),
-            )),
-
-            // Unprintable or unknown type
-            _ => None,
+            c if !c.is_alphanumeric() && c != '_' && depth == 0 && !in_expr => return i,
+            _ => {}
         }
     }
+    s.len()
 }
 
 impl Expr {
-    /// Parse a custom string like "!add(!sub(#a,#b), #c)" into the AST
     pub fn parse(input: &str) -> Result<Self> {
         let trimmed = input.trim();
 
@@ -130,28 +192,17 @@ impl Expr {
         args
     }
 
-    pub fn resolve(&self, context: &ExecutionContext, registry: &CommandRegistry) -> Result<Value> {
+    pub fn resolve(&self, registry: &CommandRegistry) -> Result<Value> {
         match self {
-            Expr::Var(name) => {
-                let var_str = context.get_var(name)?;
-                Ok(Value::String(var_str))
-            }
-            Expr::Literal(lit_val) => {
-                // Your parser directly maps to our main Value types now!
-                match lit_val {
-                    LiteralValue::Int(n) => Ok(Value::Int(*n)),
-                    LiteralValue::Float(f) => Ok(Value::Float(*f)),
-                    LiteralValue::String(s) => Ok(Value::String(s.clone())),
-                }
-            }
+            Expr::Var(name) => Ok(crate::context::get(name.to_string())),
+            Expr::Literal(lit_val) => Ok(lit_val.into()),
             Expr::Func(name, dependents) => {
                 let mut args = Vec::with_capacity(dependents.len());
                 for dep in dependents {
-                    args.push(dep.resolve(context, registry)?);
+                    args.push(dep.resolve(registry)?);
                 }
 
-                // Pass the flat slice of values directly—no pointer-mapping loops!
-                registry.execute_func(context, name, &args)
+                registry.execute_func(name, &args)
             }
         }
     }

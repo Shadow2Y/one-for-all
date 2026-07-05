@@ -1,19 +1,23 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Mutex},
+};
 
-use anyhow::Result;
+use dynamic_function_macros::make_dyn;
 
-pub struct Store {
-    data_dir: PathBuf,
+use crate::models::Value;
+
+static DATA_PATH: &str = "~/.ofa/store";
+static TEMP_STORE: LazyLock<Mutex<HashMap<String, Value>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[make_dyn]
+pub fn set(key: String, value: Value) -> Value {
+    TEMP_STORE.lock().unwrap().insert(key, value);
+    Value::Void
 }
 
-impl Store {
-    pub fn new<P: AsRef<Path>>(data_dir: P) -> Self {
-        Store {
-            data_dir: data_dir.as_ref().to_path_buf(),
-        }
-    }
-
-    pub fn get(&self) -> Result<String> {
-        Ok(self.data_dir.to_str().unwrap().to_string())
-    }
+#[make_dyn]
+pub fn get(key: String) -> Value {
+    TEMP_STORE.lock().unwrap().get(&key).unwrap().to_owned()
 }

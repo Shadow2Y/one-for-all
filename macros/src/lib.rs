@@ -2,14 +2,18 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, ItemFn};
+use syn::{parse_macro_input, ItemFn, LitStr};
 
 #[proc_macro_attribute]
 pub fn make_dyn(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
-
     let fn_name = &input.sig.ident;
-    let wrapper_name = format_ident!("dyn_{}", fn_name);
+    let wrapper_name = if _attr.is_empty() {
+        format_ident!("dyn_{}", fn_name)
+    } else {
+        let name_lit = parse_macro_input!(_attr as LitStr);
+        format_ident!("{}", name_lit.value())
+    };
     let expected_arg_count = input.sig.inputs.len();
 
     let mut arg_extractions = Vec::new();
@@ -21,20 +25,10 @@ pub fn make_dyn(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let arg_name = format_ident!("arg_{}", i);
 
             arg_extractions.push(quote! {
-                // Fix: Point directly to the public crate::models::Value path
-                let #arg_name: #arg_type = match args.get(#i).ok_or_else(|| format!("Missing argument {}", #i))? {
-                    crate::models::Value::Int(n) => {
-                        <#arg_type>::try_from(*n).map_err(|_| format!("Argument {} value out of bounds", #i))?
-                    },
-                    crate::models::Value::Custom(any) => {
-                        if let Some(val) = any.downcast_ref::<#arg_type>() {
-                            val.clone()
-                        } else {
-                            return ::std::result::Result::Err(format!("Argument {} type mismatch in Custom wrapper", #i));
-                        }
-                    },
-                    _ => return ::std::result::Result::Err(format!("Argument {} expected a numeric integer type", #i)),
-                };
+                let #arg_name: #arg_type =
+                    args.get(#i)
+                        .ok_or_else(|| format!("Missing argument {}", #i))?
+                        .cast()?;
             });
 
             arg_names.push(arg_name);
@@ -54,7 +48,7 @@ pub fn make_dyn(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             let result = #fn_name(#(#arg_names),*);
 
-            ::std::result::Result::Ok(crate::models::Value::Int(result as i64))
+            ::std::result::Result::Ok(result.into())
         }
     };
 

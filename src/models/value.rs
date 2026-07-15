@@ -1,16 +1,33 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::process::Output;
 use std::sync::Arc;
 
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize, Serializer};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)] // Optional: Makes it serialize like clean JSON values
 pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
     String(String),
     Object(HashMap<String, Value>),
+    #[serde(serialize_with = "serialize_native", skip_deserializing)]
     Native(Arc<dyn Any + Send + Sync>),
     Void,
+}
+
+// Helper to handle the non-serializable dyn Any
+fn serialize_native<S>(_: &Arc<dyn Any + Send + Sync>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Option A: Serialize as a placeholder string (highly practical for debugging/logging)
+    serializer.serialize_str("<native_object>")
+
+    // Option B: Or, if you want serialization to fail when a native object is hit:
+    // Err(serde::ser::Error::custom("Cannot serialize native objects"))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,7 +35,6 @@ pub enum LiteralValue {
     Int(i64),
     Float(f64),
     String(String),
-    Object(HashMap<String, Value>),
 }
 
 impl std::fmt::Display for LiteralValue {
@@ -27,7 +43,6 @@ impl std::fmt::Display for LiteralValue {
             LiteralValue::Int(i) => write!(f, "{}", i),
             LiteralValue::String(s) => write!(f, "{}", s),
             LiteralValue::Float(fl) => write!(f, "{}", fl),
-            LiteralValue::Object(obj) => write!(f, "{:?}", obj),
         }
     }
 }
@@ -38,7 +53,6 @@ impl From<&LiteralValue> for Value {
             LiteralValue::Int(v) => Value::Int(*v),
             LiteralValue::Float(v) => Value::Float(*v),
             LiteralValue::String(v) => Value::String(v.clone()),
-            LiteralValue::Object(v) => Value::Object(v.clone()),
         }
     }
 }
@@ -50,7 +64,7 @@ impl std::fmt::Display for Value {
             Value::Float(fl) => write!(f, "{}", fl),
             Value::String(s) => write!(f, "{}", s),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::Object(_) => write!(f, "<Custom Dynamic Type>"),
+            Value::Object(o) => write!(f, "{:?}", o),
             Value::Native(_) => write!(f, "<Custom Dynamic Type>"),
             Value::Void => write!(f, ""),
         }
@@ -186,4 +200,27 @@ impl FromValue for Value {
     fn from_value(value: &Value) -> Result<Self, String> {
         Ok(value.clone())
     }
+}
+
+pub fn output_to_value(output: Output) -> Value {
+    let mut map = HashMap::new();
+
+    map.insert(
+        "stdout".into(),
+        Value::String(String::from_utf8_lossy(&output.stdout).into_owned()),
+    );
+
+    map.insert(
+        "stderr".into(),
+        Value::String(String::from_utf8_lossy(&output.stderr).into_owned()),
+    );
+
+    map.insert("success".into(), Value::Bool(output.status.success()));
+
+    map.insert(
+        "exit_code".into(),
+        Value::Int(output.status.code().unwrap_or(-1) as i64),
+    );
+
+    Value::Object(map)
 }

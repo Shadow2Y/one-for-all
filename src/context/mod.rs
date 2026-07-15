@@ -4,7 +4,7 @@ pub use self::store::get;
 use crate::context::registry::CommandRegistry;
 pub mod defaults;
 pub mod registry;
-mod store;
+pub mod store;
 
 static REGISTRY: LazyLock<CommandRegistry> = LazyLock::new(|| init());
 
@@ -14,6 +14,7 @@ pub fn get_registry() -> &'static CommandRegistry {
 
 pub fn init() -> CommandRegistry {
     let mut registry = CommandRegistry::new();
+    registry.register_func("env", defaults::dyn_env);
     registry.register_func("add", defaults::dyn_add);
     registry.register_func("sub", defaults::dyn_sub);
     registry.register_func("mul", defaults::dyn_mul);

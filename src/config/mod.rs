@@ -1,4 +1,4 @@
-use config::Config;
+pub use config::Config;
 use std::fs;
 use std::sync::OnceLock;
 

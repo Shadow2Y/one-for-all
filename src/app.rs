@@ -1,9 +1,10 @@
-use std::any::Any;
-
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 
-use crate::models::Value;
+use crate::{
+    context, engine,
+    models::{Value, command::Command},
+};
 
 #[derive(Parser)]
 #[command(
@@ -22,7 +23,14 @@ enum AppCmd {
 }
 
 pub fn handle(args: &[String]) -> Result<Value> {
-    Ok(Value::String(args[0].to_string()))
+    let (cmd, _args) = args.split_first().expect("msg");
+
+    if cmd == "eval" {
+        // If the input string was "eval", execute it with the args
+        engine::execute_command(context::get_registry(), &Command::Args(_args.to_vec()), &[])
+    } else {
+        bail!("Err, unsupported cmd")
+    }
 }
 
 pub fn help() -> Result<Value> {

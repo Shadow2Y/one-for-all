@@ -7,6 +7,6 @@ use std::collections::HashMap;
 pub enum Command {
     Script(String),
     Args(Vec<String>),
-    Group(HashMap<String, Command>),
     Parameterized(Function),
+    Group(HashMap<String, Command>),
 }

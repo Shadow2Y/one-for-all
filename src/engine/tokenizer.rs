@@ -24,7 +24,6 @@ impl Template {
     pub fn parse(input: &str) -> Result<Self> {
         let mut parts = Vec::new();
         let mut pos = 0;
-        let bytes = input.as_bytes();
 
         while pos < input.len() {
             // Look for next expression start (! or #)
@@ -66,64 +65,48 @@ impl Template {
                 && s[1..].chars().next().unwrap().is_alphanumeric())
     }
 
+    /// Finds the boundary of the expression.
+    /// Functions (!func(...)) end after their closing parenthesis.
+    /// Variables (#var) end at the first non-alphanumeric/non-underscore character.
     fn find_expr_end(s: &str) -> usize {
+        if s.is_empty() {
+            return 0;
+        }
+
+        let is_func = s.starts_with('!');
         let mut depth = 0;
-        let mut found_start = false;
+        let mut has_parens = false;
 
         for (i, ch) in s.char_indices() {
             if i == 0 {
                 continue;
             }
-            match ch {
-                '(' => {
-                    depth += 1;
-                    found_start = true;
-                }
-                ')' => {
-                    depth -= 1;
-                    if found_start && depth == 0 {
-                        return i + 1;
+
+            if is_func {
+                match ch {
+                    '(' => {
+                        depth += 1;
+                        has_parens = true;
                     }
+                    ')' => {
+                        if depth > 0 {
+                            depth -= 1;
+                            if depth == 0 && has_parens {
+                                return i + 1; // End right after the closing ')'
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                c if !c.is_alphanumeric() && c != '_' && depth == 0 && found_start => return i,
-                _ => {}
+            } else {
+                // Variables end at the first char that is not alphanumeric and not an underscore
+                if !ch.is_alphanumeric() && ch != '_' {
+                    return i;
+                }
             }
         }
         s.len()
     }
-}
-
-fn is_expr_start(s: &str) -> bool {
-    s.starts_with('!') && s[1..].find('(').is_some()
-        || s.starts_with('#')
-            && s[1..]
-                .chars()
-                .next()
-                .map_or(false, |c| c.is_alphanumeric() || c == '_')
-}
-
-fn find_expr_end(s: &str) -> usize {
-    let mut depth = 0;
-    let mut in_expr = false;
-
-    for (i, ch) in s.char_indices() {
-        if i == 0 {
-            in_expr = true;
-            continue;
-        }
-        match ch {
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 && in_expr {
-                    return i + 1;
-                }
-            }
-            c if !c.is_alphanumeric() && c != '_' && depth == 0 && !in_expr => return i,
-            _ => {}
-        }
-    }
-    s.len()
 }
 
 impl Expr {

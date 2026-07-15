@@ -1,14 +1,5 @@
 [vars]
-stage_endpoint = "www.phonepe.com"
+hello = "AHOY"
 
-[provider.stage_token]
-
-
-[commands.drove]
-run = "drove -e #stage_endpoint -insecure -auth #stage_token"
-
-[template.java-microservice]
-vars = { JAVA_HOME = "$JAVA_21" }
-
-[template.java-testng]
-vars = { JAVA_HOME = "$JAVA_17" }
+[commands.hello]
+run = "echo '#hello'"

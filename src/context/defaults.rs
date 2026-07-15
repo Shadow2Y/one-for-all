@@ -1,7 +1,9 @@
+use std::env;
+
 use anyhow::Result;
 use dynamic_function_macros::make_dyn;
 
-use crate::models::Value;
+use crate::{config, models::Value};
 
 #[make_dyn]
 pub fn add(a: u32, b: u32) -> u32 {
@@ -28,6 +30,15 @@ pub fn modulus(a: u32, b: u32) -> u32 {
     a % b
 }
 
+#[make_dyn]
+pub fn env(key: String) -> String {
+    config::get()
+        .env
+        .get(&key)
+        .unwrap_or(&env::var(key).unwrap_or(String::new()))
+        .clone()
+}
+
 pub fn println(args: &[Value]) -> Result<Value, String> {
     println!("{:?}", args);
     Ok(Value::Void)
@@ -42,11 +53,7 @@ pub fn equals(arg0: Value, arg1: Value) -> bool {
     arg0 == arg1
 }
 
-#[make_dyn]
-pub fn http_call(arg0: Value, arg1: Value) -> bool {
-    arg0 == arg1
-}
-
 pub fn suppress(args: &[Value]) -> Result<Value, String> {
+    log::debug!("Suppressing args :: {:?}", args);
     Ok(Value::Void)
 }

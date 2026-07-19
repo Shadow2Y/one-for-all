@@ -2,7 +2,10 @@ use anyhow::Result;
 
 use crate::{
     config, context,
-    models::{Value, command::Command},
+    models::{
+        Value,
+        command::{Command, CommandKind},
+    },
 };
 
 mod executor;
@@ -24,7 +27,7 @@ pub fn find_base_command<'a>(cmd: &str, args: &'a [String]) -> (&'static Command
 
     let mut index = 0;
 
-    while let Command::Group(children) = current {
+    while let CommandKind::Group(children) = &current.cmd {
         if index >= args.len() {
             break;
         }

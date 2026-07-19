@@ -3,7 +3,7 @@ use std::env;
 use anyhow::Result;
 use dynamic_function_macros::make_dyn;
 
-use crate::{config, models::Value};
+use crate::{config, context::store, models::Value};
 
 #[make_dyn]
 pub fn add(a: u32, b: u32) -> u32 {
@@ -56,4 +56,21 @@ pub fn equals(arg0: Value, arg1: Value) -> bool {
 pub fn suppress(args: &[Value]) -> Result<Value, String> {
     log::debug!("Suppressing args :: {:?}", args);
     Ok(Value::Void)
+}
+
+#[make_dyn]
+pub fn set(key: String, value: Value) -> Value {
+    store::set(key, value);
+    Value::Void
+}
+
+#[make_dyn]
+pub fn get(key: String) -> Value {
+    store::fetch(&key).expect("Value not found for key :: {key}")
+}
+
+#[make_dyn]
+pub fn store(key: String, value: Value) -> Value {
+    store::store(key, value);
+    Value::Void
 }

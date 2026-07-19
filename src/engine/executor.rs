@@ -4,7 +4,12 @@ use crate::{
     config,
     context::{self, registry::CommandRegistry},
     engine::tokenizer::{Template, TemplatePart},
-    models::{Value, command::Command, value::output_to_value},
+    models::{
+        Value,
+        command::{Command, CommandKind, ExecutionMode},
+        value::output_to_value,
+        variable::{Provider, Variable},
+    },
 };
 use std::process::Command as ProcessCommand;
 
@@ -13,12 +18,14 @@ pub fn execute_command(
     cmd: &Command,
     args: &[String],
 ) -> Result<Value> {
-    match cmd {
-        Command::Script(script) => execute_script(registry, script, false),
+    match &cmd.cmd {
+        CommandKind::Script(script) => execute_script(registry, &cmd.kind, script, args),
 
-        Command::Args(cmd_args) => execute_script(registry, cmd_args.join(" ").as_str(), true),
+        CommandKind::Args(cmd_args) => {
+            execute_script(registry, &cmd.kind, &cmd_args.join(" "), args)
+        }
 
-        Command::Parameterized(func) => {
+        CommandKind::Parameterized(func) => {
             if args.len() < func.params.len() {
                 bail!(
                     "Expected {} arguments but got {}",
@@ -28,13 +35,13 @@ pub fn execute_command(
             }
 
             for (name, value) in func.params.iter().zip(args.iter()) {
-                context::store::set(name.clone(), Value::String(value.clone()));
+                context::set(name.clone(), Value::String(value.clone()));
             }
 
-            execute_script(registry, &func.run, true)
+            execute_script(registry, &cmd.kind, &func.run, args)
         }
 
-        Command::Group(group) => {
+        CommandKind::Group(group) => {
             bail!(
                 "Unsupported execution request of type: Group :: {:?}",
                 group
@@ -45,21 +52,11 @@ pub fn execute_command(
 
 pub fn execute_script(
     registry: &'static CommandRegistry,
+    executor: &ExecutionMode,
     script: &str,
-    exec_shell: bool,
+    args: &[String],
 ) -> Result<Value> {
-    let script = resolve_template(registry, script)?;
-    let env_vars = config::get().env.clone();
-    if !exec_shell {
-        return Ok(Value::String(script));
-    }
-    let output = ProcessCommand::new("sh")
-        .arg("-c")
-        .envs(env_vars)
-        .arg(&script)
-        .output()?;
-
-    Ok(output_to_value(output))
+    executor.execute(registry, script, args)
 }
 
 fn resolve_template(registry: &'static CommandRegistry, text: &str) -> Result<String> {
@@ -77,4 +74,38 @@ fn resolve_template(registry: &'static CommandRegistry, text: &str) -> Result<St
     }
 
     Ok(result)
+}
+
+impl ExecutionMode {
+    pub fn execute(
+        &self,
+        registry: &'static CommandRegistry,
+        script: &str,
+        args: &[String],
+    ) -> Result<Value> {
+        match self {
+            Self::Shell => execute_shell(script, args),
+
+            Self::Template => Ok(Value::String(resolve_template(registry, script)?)),
+
+            Self::TemplateShell => {
+                let script = resolve_template(registry, script)?;
+                execute_shell(&script, args)
+            }
+        }
+    }
+}
+
+fn execute_shell(script: &str, args: &[String]) -> Result<Value> {
+    let env_vars = config::get().env.clone();
+
+    let output = ProcessCommand::new("sh")
+        .arg("-c")
+        .arg(script)
+        .arg("--")
+        .args(args)
+        .envs(env_vars)
+        .output()?;
+
+    Ok(output_to_value(output))
 }

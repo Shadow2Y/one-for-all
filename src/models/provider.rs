@@ -1,17 +1,7 @@
-use super::command::Command;
+use anyhow::Result;
 
-use serde::{Deserialize, Serialize};
+use crate::{context::registry::CommandRegistry, models::Value};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Provider {
-    #[serde(default = "provider_store")]
-    store: bool,
-    global: bool,
-    fetch: Command,
-    ttl: Option<u64>,
-    signature: Option<Command>,
-}
-
-fn provider_store() -> bool {
-    return true;
+pub trait ValueProvider {
+    fn get(&self, registry: &'static CommandRegistry, key: Option<&str>) -> Result<Value>;
 }

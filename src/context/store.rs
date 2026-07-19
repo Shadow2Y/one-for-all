@@ -1,42 +1,31 @@
-use std::{
-    collections::HashMap,
-    sync::{LazyLock, Mutex},
+use std::sync::{LazyLock, Mutex};
+
+use super::persistent::StoreProvider;
+use crate::{
+    context::{self, persistent::TomlStore, runtime},
+    models::Value,
 };
 
-use dynamic_function_macros::make_dyn;
+static STORE: LazyLock<Mutex<TomlStore>> = LazyLock::new(|| Mutex::new(TomlStore::new()));
 
-use crate::{config, models::Value};
-
-static TEMP_STORE: LazyLock<Mutex<HashMap<String, Value>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-#[make_dyn]
-pub fn set(key: String, value: Value) -> Value {
-    TEMP_STORE.lock().unwrap().insert(key, value);
-    Value::Void
+pub fn set(key: String, value: Value) {
+    runtime::set(key.clone(), value.clone());
 }
 
-#[make_dyn]
-pub fn get(key: String) -> Value {
-    log::debug!("Checking value for :: {}", key);
+pub fn store(key: String, value: Value) {
+    runtime::set(key.clone(), value.clone());
 
-    // 1. Move the fallback into a reusable closure so we don't repeat ourselves
-    let get_fallback = || {
-        config::get()
-            .get_vars(&key)
-            .unwrap_or(&Value::Void)
-            .to_owned()
-    };
+    let ns = context::current();
+    STORE.lock().unwrap().set(&ns, key, value).unwrap();
+}
 
-    // 2. Safely acquire the lock
-    match TEMP_STORE.lock() {
-        Ok(val) => {
-            // 3. Check if the key actually exists in the map
-            match val.get(&key) {
-                Some(stored_value) => stored_value.to_owned(),
-                None => get_fallback(), // Key missing? Go to fallback.
-            }
-        }
-        Err(_) => get_fallback(), // Lock poisoned? Go to fallback.
+pub fn fetch(key: &str) -> Option<Value> {
+    if let Some(value) = runtime::get(key) {
+        return Some(value);
     }
+
+    let store = STORE.lock().unwrap();
+    let ns = context::current();
+
+    store.get(&ns, key).or_else(|| store.get("global", key))
 }

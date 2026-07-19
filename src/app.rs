@@ -3,7 +3,10 @@ use clap::{Parser, Subcommand};
 
 use crate::{
     context, engine,
-    models::{Value, command::Command},
+    models::{
+        Value,
+        command::{Command, CommandKind, ExecutionMode::TemplateShell},
+    },
 };
 
 #[derive(Parser)]
@@ -27,7 +30,14 @@ pub fn handle(args: &[String]) -> Result<Value> {
 
     if cmd == "eval" {
         // If the input string was "eval", execute it with the args
-        engine::execute_command(context::get_registry(), &Command::Args(_args.to_vec()), &[])
+        engine::execute_command(
+            context::get_registry(),
+            &Command {
+                kind: TemplateShell,
+                cmd: CommandKind::Args(_args.to_vec()),
+            },
+            &[],
+        )
     } else {
         bail!("Err, unsupported cmd")
     }

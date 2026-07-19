@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Value, command::Command, provider::Provider};
+use crate::models::{
+    Value,
+    command::Command,
+    variable::{Provider, Variable},
+};
 
 use std::collections::HashMap;
 
@@ -9,18 +13,15 @@ pub struct Config {
     #[serde(default = "empty_map")]
     pub env: HashMap<String, String>,
 
-    #[serde(default = "empty_vars")]
-    pub vars: HashMap<String, Value>,
+    #[serde(default)]
+    pub vars: HashMap<String, Variable>,
 
     #[serde(default = "empty_commands")]
     pub commands: HashMap<String, Command>,
-
-    #[serde(default = "empty_providers")]
-    pub providers: HashMap<String, Provider>,
 }
 
 impl Config {
-    pub fn get_vars(&self, key: &String) -> Option<&Value> {
+    pub fn get_vars(&self, key: &String) -> Option<&Variable> {
         self.vars.get(key)
     }
 }

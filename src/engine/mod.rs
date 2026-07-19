@@ -9,37 +9,48 @@ use crate::{
 };
 
 mod executor;
+mod resolver;
 pub mod tokenizer;
+
 pub use executor::execute_command;
 
+
+// ── CLI entry point ───────────────────────────────────────────────────────────
+
+/// Resolves the CLI command string (possibly a subcommand path) and executes
+/// the matched leaf command.
 pub fn handle_command(cmd: &str, args: &[String]) -> Result<Value> {
-    let final_cmd = find_base_command(cmd, args);
-    execute_command(context::get_registry(), final_cmd.0, final_cmd.1)
+    let (leaf, remaining_args) = find_leaf(cmd, args)?;
+    execute_command(context::get_registry(), leaf, remaining_args)
 }
 
-pub fn find_base_command<'a>(cmd: &str, args: &'a [String]) -> (&'static Command, &'a [String]) {
+// ── Command resolution ────────────────────────────────────────────────────────
+
+/// Walks the command tree for `cmd`, consuming leading `args` entries that
+/// match group subcommand names until a leaf (non-group) command is reached.
+///
+/// Returns a reference to the leaf [`Command`] and the unconsumed args slice.
+fn find_leaf<'a>(cmd: &str, args: &'a [String]) -> Result<(&'static Command, &'a [String])> {
     let config = config::get();
 
     let mut current = config
         .commands
         .get(cmd)
-        .unwrap_or_else(|| panic!("Unknown command '{}'", cmd));
+        .ok_or_else(|| anyhow::anyhow!("Unknown command '{cmd}'"))?;
 
-    let mut index = 0;
+    let mut consumed = 0;
 
     while let CommandKind::Group(children) = &current.cmd {
-        if index >= args.len() {
-            break;
-        }
-
-        match children.get(&args[index]) {
+        match args.get(consumed).and_then(|a| children.get(a)) {
             Some(next) => {
                 current = next;
-                index += 1;
+                consumed += 1;
             }
+            // No matching subcommand — stop here (caller may want the group's
+            // default behaviour or will surface an error via execute_command).
             None => break,
         }
     }
 
-    (current, &args[index..])
+    Ok((current, &args[consumed..]))
 }

@@ -1,41 +1,56 @@
 use std::{path::PathBuf, sync::LazyLock};
+
+mod builtins;
 mod persistent;
-mod runtime;
-use crate::context::registry::CommandRegistry;
-pub mod defaults;
 pub mod registry;
+mod runtime;
 pub mod store;
-pub use defaults::get;
-pub use defaults::set;
 
-static REGISTRY: LazyLock<CommandRegistry> = LazyLock::new(|| init());
+use crate::context::registry::FunctionRegistry;
 
-pub fn get_registry() -> &'static CommandRegistry {
+// ── Global function registry ──────────────────────────────────────────────────
+
+static REGISTRY: LazyLock<FunctionRegistry> = LazyLock::new(init);
+
+pub fn get_registry() -> &'static FunctionRegistry {
     &REGISTRY
 }
 
-pub fn init() -> CommandRegistry {
-    let mut registry = CommandRegistry::new();
-    registry.register_func("env", defaults::dyn_env);
-    registry.register_func("add", defaults::dyn_add);
-    registry.register_func("sub", defaults::dyn_sub);
-    registry.register_func("mul", defaults::dyn_mul);
-    registry.register_func("div", defaults::dyn_div);
-    registry.register_func("throw", defaults::throw);
-    registry.register_func("print", defaults::println);
-    registry.register_func("eq", defaults::dyn_equals);
-    registry.register_func("mod", defaults::dyn_modulus);
-    registry.register_func("sup", defaults::suppress);
+fn init() -> FunctionRegistry {
+    let mut r = FunctionRegistry::new();
 
-    registry.register_func("set", defaults::dyn_set);
-    registry.register_func("get", defaults::dyn_get);
-    registry.register_func("store", defaults::dyn_store);
-    registry
+    // Arithmetic
+    r.register_func("add", builtins::dyn_add);
+    r.register_func("sub", builtins::dyn_sub);
+    r.register_func("mul", builtins::dyn_mul);
+    r.register_func("div", builtins::dyn_div);
+    r.register_func("mod", builtins::dyn_modulus);
+
+    // Comparison
+    r.register_func("eq", builtins::dyn_equals);
+
+    // Environment
+    r.register_func("env", builtins::dyn_env);
+
+    // Control / side-effects
+    r.register_func("print", builtins::println);
+    r.register_func("throw", builtins::throw);
+    r.register_func("sup", builtins::suppress);
+
+    // Variable store
+    r.register_func("set", builtins::dyn_set);
+    r.register_func("get", builtins::dyn_get);
+    r.register_func("store", builtins::dyn_store);
+
+    r
 }
 
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+/// Returns the name of the current working directory (used as the store
+/// namespace so that persistent variables are scoped per-project).
 pub fn current() -> String {
     let cwd = std::env::current_dir().unwrap_or(PathBuf::from("."));
-
     cwd.file_name()
         .unwrap_or_default()
         .to_string_lossy()

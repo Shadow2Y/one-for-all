@@ -1,18 +1,27 @@
-use crate::{
-    context::registry::CommandRegistry,
-    models::{Value, value::LiteralValue},
-};
 use anyhow::{Result, bail};
+
+use crate::models::value::LiteralValue;
+
+// ── Public types ──────────────────────────────────────────────────────────────
+
+/// A parsed template string, broken into literal text segments and embedded
+/// expressions.  Resolution is intentionally *not* done here — the tokenizer
+/// only produces the AST; see [`crate::engine::resolver`] for evaluation.
+pub struct Template {
+    pub parts: Vec<TemplatePart>,
+}
 
 pub enum TemplatePart {
     Text(String),
     Expr(Expr),
 }
 
-pub struct Template {
-    pub parts: Vec<TemplatePart>,
-}
-
+/// A parsed expression that can appear inside a template.
+///
+/// Syntax:
+/// - `#name`          → [`Expr::Var`]
+/// - `!func(a, b)`    → [`Expr::Func`]
+/// - `42` / `3.14` / `hello` (bare literal in a function arg) → [`Expr::Literal`]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Var(String),
@@ -20,173 +29,163 @@ pub enum Expr {
     Func(String, Vec<Expr>),
 }
 
+// ── Template parsing ──────────────────────────────────────────────────────────
+
 impl Template {
     pub fn parse(input: &str) -> Result<Self> {
         let mut parts = Vec::new();
         let mut pos = 0;
 
         while pos < input.len() {
-            // Look for next expression start (! or #)
-            if let Some(expr_pos) = input[pos..].find(|c| c == '!' || c == '#') {
-                let expr_pos = pos + expr_pos;
+            // Scan for the next expression starter ('!' or '#').
+            if let Some(rel) = input[pos..].find(|c| c == '!' || c == '#') {
+                let expr_pos = pos + rel;
 
-                // Check if it's actually an expression
-                if Self::is_valid_expr_start(&input[expr_pos..]) {
-                    // Collect text before expression
+                if is_expr_start(&input[expr_pos..]) {
+                    // Flush any literal text that came before.
                     if expr_pos > pos {
                         parts.push(TemplatePart::Text(input[pos..expr_pos].to_string()));
                     }
 
-                    // Find expression end
-                    let expr_end = Self::find_expr_end(&input[expr_pos..]);
-                    let expr_str = &input[expr_pos..expr_pos + expr_end];
-                    parts.push(TemplatePart::Expr(Expr::parse(expr_str)?));
+                    let expr_end = expr_boundary(&input[expr_pos..]);
+                    let expr_src = &input[expr_pos..expr_pos + expr_end];
+                    parts.push(TemplatePart::Expr(Expr::parse(expr_src)?));
 
                     pos = expr_pos + expr_end;
                 } else {
+                    // The character is not actually an expression start; skip it.
                     pos = expr_pos + 1;
                 }
             } else {
-                // No more expressions, consume rest as text
-                if pos < input.len() {
-                    parts.push(TemplatePart::Text(input[pos..].to_string()));
-                }
+                // No more expressions — flush the rest as plain text.
+                parts.push(TemplatePart::Text(input[pos..].to_string()));
                 break;
             }
         }
 
         Ok(Template { parts })
     }
+}
 
-    fn is_valid_expr_start(s: &str) -> bool {
-        (s.starts_with('!') && s[1..].contains('('))
-            || (s.starts_with('#')
-                && s.len() > 1
-                && s[1..].chars().next().unwrap().is_alphanumeric())
-    }
+// ── Expression parsing ────────────────────────────────────────────────────────
 
-    /// Finds the boundary of the expression.
-    /// Functions (!func(...)) end after their closing parenthesis.
-    /// Variables (#var) end at the first non-alphanumeric/non-underscore character.
-    fn find_expr_end(s: &str) -> usize {
-        if s.is_empty() {
-            return 0;
+impl Expr {
+    /// Parses a single expression token.
+    ///
+    /// - `#name`       → `Expr::Var("name")`
+    /// - `!fn(…)`      → `Expr::Func("fn", […])`
+    /// - integer / float / anything else → `Expr::Literal`
+    pub fn parse(input: &str) -> Result<Self> {
+        let s = input.trim();
+
+        if let Some(name) = s.strip_prefix('#') {
+            if name.is_empty() {
+                bail!("Variable name after '#' must not be empty");
+            }
+            return Ok(Expr::Var(name.to_string()));
         }
 
-        let is_func = s.starts_with('!');
-        let mut depth = 0;
-        let mut has_parens = false;
+        if let Some(body) = s.strip_prefix('!') {
+            let paren = body
+                .find('(')
+                .ok_or_else(|| anyhow::anyhow!("Function expression is missing '('"))?;
 
-        for (i, ch) in s.char_indices() {
-            if i == 0 {
-                continue;
-            }
+            let func_name = body[..paren].trim().to_string();
 
-            if is_func {
-                match ch {
-                    '(' => {
-                        depth += 1;
-                        has_parens = true;
-                    }
-                    ')' => {
-                        if depth > 0 {
-                            depth -= 1;
-                            if depth == 0 && has_parens {
-                                return i + 1; // End right after the closing ')'
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            } else {
-                // Variables end at the first char that is not alphanumeric and not an underscore
-                if !ch.is_alphanumeric() && ch != '_' {
-                    return i;
-                }
-            }
+            let close = body
+                .rfind(')')
+                .ok_or_else(|| anyhow::anyhow!("Function expression is missing ')'"))?;
+
+            let args_src = &body[paren + 1..close];
+            let arg_exprs: Result<Vec<Expr>> = split_args(args_src)
+                .into_iter()
+                .filter(|a| !a.trim().is_empty())
+                .map(|a| Expr::parse(a.trim()))
+                .collect();
+
+            return Ok(Expr::Func(func_name, arg_exprs?));
         }
-        s.len()
+
+        // Bare literal (appears as a function argument)
+        if let Ok(n) = s.parse::<i64>() {
+            return Ok(Expr::Literal(LiteralValue::Int(n)));
+        }
+        if let Ok(f) = s.parse::<f64>() {
+            return Ok(Expr::Literal(LiteralValue::Float(f)));
+        }
+        Ok(Expr::Literal(LiteralValue::String(s.to_string())))
     }
 }
 
-impl Expr {
-    pub fn parse(input: &str) -> Result<Self> {
-        let trimmed = input.trim();
+// ── Internal helpers ──────────────────────────────────────────────────────────
 
-        if let Some(var_name) = trimmed.strip_prefix('#') {
-            if var_name.is_empty() {
-                bail!("var_name is empty")
-            }
-            return Ok(Expr::Var(var_name.to_string()));
-        }
+/// Returns `true` if `s` starts with a syntactically valid expression opener.
+fn is_expr_start(s: &str) -> bool {
+    (s.starts_with('!') && s[1..].contains('('))
+        || (s.starts_with('#') && s[1..].chars().next().map_or(false, |c| c.is_alphanumeric()))
+}
 
-        if let Some(func_content) = trimmed.strip_prefix('!') {
-            let paren_pos = func_content
-                .find('(')
-                .ok_or_else(|| anyhow::anyhow!("Function missing opening parenthesis"))?;
-
-            let func_name = func_content[..paren_pos].trim().to_string();
-
-            let close_paren = func_content
-                .rfind(')')
-                .ok_or_else(|| anyhow::anyhow!("Function missing closing parenthesis"))?;
-
-            let args_str = &func_content[paren_pos + 1..close_paren];
-
-            let mut dependents = Vec::new();
-            if !args_str.trim().is_empty() {
-                for arg in Self::split_args(args_str) {
-                    dependents.push(Self::parse(arg.trim())?);
-                }
-            }
-
-            return Ok(Expr::Func(func_name, dependents));
-        }
-        if let Ok(num) = trimmed.parse::<i64>() {
-            Ok(Expr::Literal(LiteralValue::Int(num)))
-        } else if let Ok(float) = trimmed.parse::<f64>() {
-            Ok(Expr::Literal(LiteralValue::Float(float)))
-        } else {
-            Ok(Expr::Literal(LiteralValue::String(trimmed.to_string())))
-        }
+/// Returns the byte length of the expression starting at the beginning of `s`.
+///
+/// - Functions (`!fn(…)`) end after the matching closing `)`.
+/// - Variables (`#name`) end at the first non-alphanumeric / non-`_` character.
+fn expr_boundary(s: &str) -> usize {
+    if s.is_empty() {
+        return 0;
     }
 
-    fn split_args(args_str: &str) -> Vec<&str> {
-        let mut args = Vec::new();
-        let mut current_arg_start = 0;
-        let mut paren_depth = 0;
-
-        for (i, ch) in args_str.char_indices() {
+    if s.starts_with('!') {
+        // Track paren depth to find the matching close.
+        let mut depth: usize = 0;
+        let mut opened = false;
+        for (i, ch) in s.char_indices().skip(1) {
             match ch {
-                '(' => paren_depth += 1,
-                ')' => paren_depth -= 1,
-                ',' if paren_depth == 0 => {
-                    args.push(&args_str[current_arg_start..i]);
-                    current_arg_start = i + 1;
+                '(' => {
+                    depth += 1;
+                    opened = true;
+                }
+                ')' if depth > 0 => {
+                    depth -= 1;
+                    if depth == 0 && opened {
+                        return i + 1;
+                    }
                 }
                 _ => {}
             }
         }
-
-        if current_arg_start < args_str.len() {
-            args.push(&args_str[current_arg_start..]);
-        }
-
-        args
-    }
-
-    pub fn resolve(&self, registry: &CommandRegistry) -> Result<Value> {
-        match self {
-            Expr::Var(name) => Ok(crate::context::get(name.to_string())),
-            Expr::Literal(lit_val) => Ok(lit_val.into()),
-            Expr::Func(name, dependents) => {
-                let mut args = Vec::with_capacity(dependents.len());
-                for dep in dependents {
-                    args.push(dep.resolve(registry)?);
-                }
-
-                registry.execute_func(name, &args)
+    } else {
+        // Variable: stop at first char that isn't alphanumeric or '_'.
+        for (i, ch) in s.char_indices().skip(1) {
+            if !ch.is_alphanumeric() && ch != '_' {
+                return i;
             }
         }
     }
+
+    s.len()
+}
+
+/// Splits a comma-separated argument string, respecting nested parentheses.
+fn split_args(args: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut start = 0;
+    let mut depth: usize = 0;
+
+    for (i, ch) in args.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                result.push(&args[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    if start < args.len() {
+        result.push(&args[start..]);
+    }
+
+    result
 }

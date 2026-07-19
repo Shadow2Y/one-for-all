@@ -1,110 +1,115 @@
+use std::collections::HashMap;
+use std::process::Command as ProcessCommand;
+
 use anyhow::{Result, bail};
 
 use crate::{
     config,
-    context::{self, registry::CommandRegistry},
-    engine::tokenizer::{Template, TemplatePart},
+    context::registry::FunctionRegistry,
+    engine::resolver,
     models::{
         Value,
         command::{Command, CommandKind, ExecutionMode},
         value::output_to_value,
-        variable::{Provider, Variable},
     },
 };
-use std::process::Command as ProcessCommand;
 
+// ── Public entry point ────────────────────────────────────────────────────────
+
+/// Dispatches a resolved [`Command`] to the appropriate execution path.
+///
+/// `local_vars` carries call-scoped variables (e.g. parameterised command
+/// arguments) so that they never touch shared global state, keeping concurrent
+/// executions isolated.
 pub fn execute_command(
-    registry: &'static CommandRegistry,
+    registry: &'static FunctionRegistry,
     cmd: &Command,
     args: &[String],
 ) -> Result<Value> {
-    match &cmd.cmd {
-        CommandKind::Script(script) => execute_script(registry, &cmd.kind, script, args),
+    execute_with_scope(registry, cmd, args, &HashMap::new())
+}
 
-        CommandKind::Args(cmd_args) => {
-            execute_script(registry, &cmd.kind, &cmd_args.join(" "), args)
-        }
+// ── Internal dispatcher ───────────────────────────────────────────────────────
+
+fn execute_with_scope(
+    registry: &'static FunctionRegistry,
+    cmd: &Command,
+    args: &[String],
+    local_vars: &HashMap<String, Value>,
+) -> Result<Value> {
+    match &cmd.cmd {
+        CommandKind::Script(script) => run(registry, &cmd.kind, script, args, local_vars),
+
+        CommandKind::Args(parts) => run(registry, &cmd.kind, &parts.join(" "), args, local_vars),
 
         CommandKind::Parameterized(func) => {
             if args.len() < func.params.len() {
                 bail!(
-                    "Expected {} arguments but got {}",
+                    "Expected {} argument(s) but got {}",
                     func.params.len(),
                     args.len()
                 );
             }
 
-            for (name, value) in func.params.iter().zip(args.iter()) {
-                context::set(name.clone(), Value::String(value.clone()));
-            }
+            // Build a call-local var scope from the named parameters.
+            // These are passed down into the resolver instead of being written
+            // to the global / thread-local store, so concurrent calls to the
+            // same parameterised command cannot interfere with each other.
+            let params: HashMap<String, Value> = func
+                .params
+                .iter()
+                .zip(args.iter())
+                .map(|(name, val)| (name.clone(), Value::String(val.clone())))
+                .collect();
 
-            execute_script(registry, &cmd.kind, &func.run, args)
+            run(registry, &cmd.kind, &func.run, args, &params)
         }
 
-        CommandKind::Group(group) => {
+        CommandKind::Group(children) => {
             bail!(
-                "Unsupported execution request of type: Group :: {:?}",
-                group
+                "Cannot execute a command group directly — subcommand required. \
+                 Available: {:?}",
+                children.keys().collect::<Vec<_>>()
             )
         }
     }
 }
 
-pub fn execute_script(
-    registry: &'static CommandRegistry,
-    executor: &ExecutionMode,
+// ── Execution modes ───────────────────────────────────────────────────────────
+
+/// Runs a script string under the given [`ExecutionMode`], applying template
+/// resolution where needed.
+fn run(
+    registry: &'static FunctionRegistry,
+    mode: &ExecutionMode,
     script: &str,
     args: &[String],
+    local_vars: &HashMap<String, Value>,
 ) -> Result<Value> {
-    executor.execute(registry, script, args)
-}
+    match mode {
+        ExecutionMode::Shell => shell(script, args),
 
-fn resolve_template(registry: &'static CommandRegistry, text: &str) -> Result<String> {
-    let template = Template::parse(text)?;
-    let mut result = String::new();
-
-    for part in &template.parts {
-        match part {
-            TemplatePart::Text(t) => result.push_str(t),
-            TemplatePart::Expr(e) => {
-                let value = e.resolve(registry)?;
-                result.push_str(&value.to_string());
-            }
+        ExecutionMode::Template => {
+            let rendered = resolver::render(script, registry, local_vars)?;
+            Ok(Value::String(rendered))
         }
-    }
 
-    Ok(result)
-}
-
-impl ExecutionMode {
-    pub fn execute(
-        &self,
-        registry: &'static CommandRegistry,
-        script: &str,
-        args: &[String],
-    ) -> Result<Value> {
-        match self {
-            Self::Shell => execute_shell(script, args),
-
-            Self::Template => Ok(Value::String(resolve_template(registry, script)?)),
-
-            Self::TemplateShell => {
-                let script = resolve_template(registry, script)?;
-                execute_shell(&script, args)
-            }
+        ExecutionMode::TemplateShell => {
+            let rendered = resolver::render(script, registry, local_vars)?;
+            shell(&rendered, args)
         }
     }
 }
 
-fn execute_shell(script: &str, args: &[String]) -> Result<Value> {
-    let env_vars = config::get().env.clone();
+// ── Shell execution ───────────────────────────────────────────────────────────
 
+fn shell(script: &str, args: &[String]) -> Result<Value> {
     let output = ProcessCommand::new("sh")
         .arg("-c")
         .arg(script)
         .arg("--")
         .args(args)
-        .envs(env_vars)
+        .envs(config::get().env.clone())
         .output()?;
 
     Ok(output_to_value(output))

@@ -4,19 +4,19 @@ use anyhow::{Result, anyhow};
 
 use crate::models::Value;
 
-pub type DynCommand = fn(&[Value]) -> std::result::Result<Value, String>;
+pub type DynFunction = fn(&[Value]) -> std::result::Result<Value, String>;
 
 #[derive(Default)]
-pub struct CommandRegistry {
-    commands: HashMap<String, DynCommand>,
+pub struct FunctionRegistry {
+    commands: HashMap<String, DynFunction>,
 }
 
-impl CommandRegistry {
+impl FunctionRegistry {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn register_func<S>(&mut self, name: S, func: DynCommand)
+    pub fn register_func<S>(&mut self, name: S, func: DynFunction)
     where
         S: Into<String>,
     {

@@ -2,4 +2,4 @@
 hello = "AHOY"
 
 [commands.hello]
-run = "echo '#hello'"
+run = "echo '@hello'"

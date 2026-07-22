@@ -2,7 +2,8 @@ use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 
 use crate::{
-    context, engine,
+    context,
+    engine::{self, discovery},
     models::{
         Value,
         command::{Command, CommandKind, ExecutionMode::TemplateShell},
@@ -44,5 +45,5 @@ pub fn handle(args: &[String]) -> Result<Value> {
 }
 
 pub fn help() -> Result<Value> {
-    Ok(Value::String("HELP".to_string()))
+    Ok(discovery::list_base_commands())
 }

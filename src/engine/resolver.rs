@@ -1,12 +1,9 @@
-use std::collections::HashMap;
-
-use anyhow::{Result, bail};
+use std::{collections::HashMap, io::Error};
 
 use crate::{
     config,
-    context::{registry::FunctionRegistry, store},
-    engine::tokenizer::{Expr, Template, TemplatePart},
-    models::{Value, variable::Variable},
+    engine::tokenizer::{Template, TemplatePart},
+    models::variable::Variable,
 };
 
 // ── Template resolution ───────────────────────────────────────────────────────
@@ -21,84 +18,42 @@ use crate::{
 /// inline and resolution stays deterministic across concurrent executions.
 pub fn render_template(
     template: &Template,
-    registry: &'static FunctionRegistry,
-    local_vars: &HashMap<String, Value>,
-) -> Result<String> {
+    local_vars: &HashMap<String, String>,
+) -> Result<String, Error> {
     let mut out = String::new();
     for part in &template.parts {
         match part {
             TemplatePart::Text(t) => out.push_str(t),
-            TemplatePart::Expr(e) => {
-                out.push_str(&resolve_expr(e, registry, local_vars)?.to_string())
-            }
+            TemplatePart::Expr(e) => out.push_str(&resolve_var(e, local_vars)?.to_string()),
         }
     }
     Ok(out)
 }
 
 /// Convenience wrapper: parse `text` into a [`Template`] then render it.
-pub fn render(
-    text: &str,
-    registry: &'static FunctionRegistry,
-    local_vars: &HashMap<String, Value>,
-) -> Result<String> {
-    render_template(&Template::parse(text)?, registry, local_vars)
-}
-
-// ── Expression resolution ─────────────────────────────────────────────────────
-
-/// Resolves an [`Expr`] to a [`Value`].
-///
-/// Variable lookup order (first hit wins):
-/// 1. `local_vars`          — call-scoped (e.g. parameterised command params)
-/// 2. Thread-local session  — `set()`/`get()` builtins within the current thread
-/// 3. Persistent store      — `store()` values (TOML-backed, per-namespace)
-/// 4. Config `[vars]` table — static or provider-backed variables
-pub fn resolve_expr(
-    expr: &Expr,
-    registry: &'static FunctionRegistry,
-    local_vars: &HashMap<String, Value>,
-) -> Result<Value> {
-    match expr {
-        Expr::Literal(lit) => Ok(lit.into()),
-
-        Expr::Var(name) => resolve_var(name, registry, local_vars),
-
-        Expr::Func(name, arg_exprs) => {
-            let args: Result<Vec<Value>> = arg_exprs
-                .iter()
-                .map(|e| resolve_expr(e, registry, local_vars))
-                .collect();
-            registry.execute_func(name, &args?)
-        }
-    }
+pub fn render_text(text: &str, local_vars: &HashMap<String, String>) -> Result<String, Error> {
+    render_template(&Template::parse(text)?, local_vars)
 }
 
 // ── Variable resolution ───────────────────────────────────────────────────────
 
 /// Resolves a named variable following the layered lookup order described in
 /// [`resolve_expr`].
-fn resolve_var(
-    name: &str,
-    registry: &'static FunctionRegistry,
-    local_vars: &HashMap<String, Value>,
-) -> Result<Value> {
+fn resolve_var(name: &str, local_vars: &HashMap<String, String>) -> Result<String, Error> {
     // 1. Call-local scope (e.g. parameterised command arguments)
     if let Some(v) = local_vars.get(name) {
         return Ok(v.clone());
     }
 
-    // 2. Thread-local session + persistent store
-    if let Some(v) = store::fetch(name) {
-        return Ok(v);
-    }
-
     // 3. Config [vars] table — may be a literal value or a provider command
     if let Some(variable) = config::get().vars.get(name) {
-        return resolve_variable(variable, registry);
+        return resolve_variable(variable);
     }
 
-    bail!("Undefined variable '{name}'")
+    Err(Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("Undefined variable '@{name}'"),
+    ))
 }
 
 /// Resolves a [`Variable`] from the config `[vars]` table.
@@ -107,12 +62,13 @@ fn resolve_var(
 /// - `Variable::Provided` → the inner `Command` is executed to produce the
 ///   value. Provider commands run with an empty `local_vars` scope because they
 ///   are config-level, not call-scoped.
-pub fn resolve_variable(variable: &Variable, registry: &'static FunctionRegistry) -> Result<Value> {
+pub fn resolve_variable(variable: &Variable) -> Result<String, Error> {
     match variable {
         Variable::Literal(v) => Ok(v.clone()),
         Variable::Provided(provider) => {
             // Providers run in an isolated scope — no local vars bleed in.
-            crate::engine::execute_command(registry, &provider.run, &[])
+            let output = crate::engine::execute_command(&provider.run, &[]);
+            Ok(String::from_utf8_lossy(&output?.stdout).into_owned())
         }
     }
 }

@@ -1,11 +1,11 @@
-use anyhow::Result;
+use std::{
+    io::Error,
+    process::{ExitStatus, Output},
+};
 
 use crate::{
-    config, context,
-    models::{
-        Value,
-        command::{Command, CommandKind},
-    },
+    config,
+    models::command::{Command, CommandKind},
 };
 
 pub mod discovery;
@@ -20,12 +20,21 @@ pub use executor::execute_command;
 
 /// Resolves the CLI command string (possibly a subcommand path) and executes
 /// the matched leaf command, or returns a subcommand listing if a command group is targeted.
-pub fn handle_command(cmd: &str, args: &[String]) -> Result<Value> {
+pub fn handle_command(cmd: &str, args: &[String]) -> Result<Output, Error> {
     let (leaf, remaining_args, path) = find_leaf(cmd, args)?;
 
     match &leaf.cmd {
-        CommandKind::Group(children) => Ok(list_group_subcommands(&path, children)),
-        _ => execute_command(context::get_registry(), leaf, remaining_args),
+        CommandKind::Group(children) => {
+            let text = list_group_subcommands(&path, children);
+
+            Ok(Output {
+                status: ExitStatus::default(),
+                stdout: text.into_bytes(),
+                stderr: Vec::new(),
+            })
+        }
+
+        _ => execute_command(leaf, remaining_args),
     }
 }
 
@@ -38,13 +47,15 @@ pub fn handle_command(cmd: &str, args: &[String]) -> Result<Value> {
 fn find_leaf<'a>(
     cmd: &str,
     args: &'a [String],
-) -> Result<(&'static Command, &'a [String], String)> {
+) -> Result<(&'static Command, &'a [String], String), Error> {
     let config = config::get();
 
-    let mut current = config
-        .commands
-        .get(cmd)
-        .ok_or_else(|| anyhow::anyhow!("Unknown command '{cmd}'"))?;
+    let mut current = config.commands.get(cmd).ok_or_else(|| {
+        Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Unknown command '{cmd}'"),
+        )
+    })?;
 
     let mut consumed = 0;
     let mut path = cmd.to_string();

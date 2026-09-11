@@ -1,13 +1,13 @@
-use anyhow::{Result, bail};
+use std::{
+    io::Error,
+    process::{ExitStatus, Output},
+};
+
 use clap::{Parser, Subcommand};
 
 use crate::{
-    context,
     engine::{self, discovery},
-    models::{
-        Value,
-        command::{Command, CommandKind, ExecutionMode::TemplateShell},
-    },
+    models::command::{Command, CommandKind, ExecutionMode::TemplateShell},
 };
 
 #[derive(Parser)]
@@ -26,24 +26,27 @@ enum AppCmd {
     Help,
 }
 
-pub fn handle(args: &[String]) -> Result<Value> {
-    let (cmd, _args) = args.split_first().expect("msg");
-
+pub fn handle(args: &[String]) -> Result<Output, Error> {
+    let (cmd, args) = args
+        .split_first()
+        .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidInput, "missing command"))?;
     if cmd == "eval" {
-        // If the input string was "eval", execute it with the args
         engine::execute_command(
-            context::get_registry(),
             &Command {
                 kind: TemplateShell,
-                cmd: CommandKind::Args(_args.to_vec()),
+                cmd: CommandKind::Args(args.to_vec()),
             },
             &[],
         )
     } else {
-        bail!("Err, unsupported cmd")
+        help()
     }
 }
 
-pub fn help() -> Result<Value> {
-    Ok(discovery::list_base_commands())
+pub fn help() -> Result<Output, Error> {
+    Ok(Output {
+        status: ExitStatus::default(),
+        stdout: discovery::list_base_commands().into_bytes(),
+        stderr: Vec::new(),
+    })
 }

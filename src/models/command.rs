@@ -14,7 +14,6 @@ pub struct Command {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
     Shell,
-    Template,
     TemplateShell,
 }
 

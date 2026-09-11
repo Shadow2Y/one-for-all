@@ -2,14 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     config,
-    models::{
-        Value,
-        command::{Command, CommandKind, ExecutionMode},
-    },
+    models::command::{Command, CommandKind, ExecutionMode},
 };
 
 /// Formats and lists all available base commands from resolved configuration.
-pub fn list_base_commands() -> Value {
+pub fn list_base_commands() -> String {
     let cfg = config::get();
     let mut out = String::new();
 
@@ -40,21 +37,20 @@ pub fn list_base_commands() -> Value {
         }
     }
 
-    // Include built-in app command
     out.push_str(&format!("  {:20} [builtin]\n", "app"));
 
     out.push_str("\nUsage:\n");
     out.push_str("  ofa <command> [args...]\n");
 
-    Value::String(out)
+    out
 }
 
 /// Formats available subcommands for a command group.
-pub fn list_group_subcommands(group_path: &str, children: &HashMap<String, Command>) -> Value {
+pub fn list_group_subcommands(group_path: &str, children: &HashMap<String, Command>) -> String {
     let mut out = String::new();
 
     out.push_str(&format!("'{}' is a command group.\n\n", group_path));
-    out.push_str(&format!("Available Subcommands for 'ofa {}':\n", group_path));
+    out.push_str(&format!("Available Subcommands for '{}':\n", group_path));
 
     let mut keys: Vec<&String> = children.keys().collect();
     keys.sort();
@@ -72,15 +68,16 @@ pub fn list_group_subcommands(group_path: &str, children: &HashMap<String, Comma
     out.push_str("\nUsage:\n");
     out.push_str(&format!("  ofa {} <subcommand> [args...]\n", group_path));
 
-    Value::String(out)
+    out
 }
 
 fn format_cmd_type(cmd: &Command) -> String {
     match &cmd.cmd {
-        CommandKind::Group(children) => format!("[group] ({} subcommands)", children.len()),
+        CommandKind::Group(children) => {
+            format!("[group] ({} subcommands)", children.len())
+        }
         _ => match cmd.kind {
             ExecutionMode::Shell => "[shell]".to_string(),
-            ExecutionMode::Template => "[template]".to_string(),
             ExecutionMode::TemplateShell => "[template_shell]".to_string(),
         },
     }

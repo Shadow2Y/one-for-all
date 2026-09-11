@@ -45,13 +45,21 @@ mod tests {
     #[test]
     fn test_config_merge_overrides_keys() {
         let mut global = Config::default();
-        global.env.insert("ENV_A".to_string(), "global_val".to_string());
-        global.env.insert("ENV_B".to_string(), "global_val".to_string());
+        global
+            .env
+            .insert("ENV_A".to_string(), "global_val".to_string());
+        global
+            .env
+            .insert("ENV_B".to_string(), "global_val".to_string());
 
         let mut local = Config::default();
         local.profile = Some("java".to_string());
-        local.env.insert("ENV_B".to_string(), "local_override".to_string());
-        local.env.insert("ENV_C".to_string(), "local_val".to_string());
+        local
+            .env
+            .insert("ENV_B".to_string(), "local_override".to_string());
+        local
+            .env
+            .insert("ENV_C".to_string(), "local_val".to_string());
 
         global.merge(local);
 
@@ -61,5 +69,3 @@ mod tests {
         assert_eq!(global.env.get("ENV_C").unwrap(), "local_val");
     }
 }
-
-

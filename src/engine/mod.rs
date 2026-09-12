@@ -2,7 +2,6 @@ use std::{io::Result, process::Output};
 
 use crate::models::request::ExecutionRequest;
 
-pub mod discovery;
 mod executor;
 mod resolver;
 pub mod tokenizer;

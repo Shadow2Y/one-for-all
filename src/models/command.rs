@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Command {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default = "kind")]
     pub kind: ExecutionMode,
 
     pub cmd: String,
@@ -23,4 +23,20 @@ pub struct Command {
 pub enum ExecutionMode {
     Shell,
     TemplateShell,
+}
+
+impl Command {
+    pub fn new(kind: ExecutionMode, cmd: String) -> Self {
+        Command {
+            kind: kind,
+            cmd: cmd,
+            params: Vec::new(),
+            defaults: HashMap::new(),
+            allow_trailing_args: false,
+        }
+    }
+}
+
+fn kind() -> ExecutionMode {
+    ExecutionMode::TemplateShell
 }

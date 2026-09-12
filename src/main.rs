@@ -14,7 +14,7 @@ mod models;
     name = "ofa",
     after_help = app::help(),
     arg_required_else_help = true,
-    about = "`one-for-all` the one CLI tool for orchestrating them all"
+    about = "\n\n`one-for-all` the one CLI tool for orchestrating them all"
 )]
 struct CLI {
     /// Dry run mode -- print the resultant script without executing it
@@ -35,10 +35,6 @@ struct CLI {
 }
 
 fn main() -> Result<()> {
-    env_logger::Builder::from_default_env()
-        .format_timestamp(None)
-        .init();
-
     let cli = CLI::parse();
 
     let (command, args) = match cli.args.split_first() {
@@ -60,7 +56,6 @@ fn main() -> Result<()> {
                 dry_run: cli.dry_run,
                 verbose: cli.verbose,
                 interpolate: cli.interpolate,
-                name: cmd.to_string(),
                 cmd: command,
                 args,
             })

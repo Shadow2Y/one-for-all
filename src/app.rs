@@ -5,9 +5,12 @@ use std::{
 
 use crate::{
     config,
-    engine::{self, discovery::format_cmd_type},
+    engine::{self},
     models::{
-        command::{Command, CommandKind, ExecutionMode::TemplateShell},
+        command::{
+            Command,
+            ExecutionMode::{self, TemplateShell},
+        },
         request::ExecutionRequest,
     },
 };
@@ -19,12 +22,8 @@ pub fn handle(args: &[String]) -> Result<Output> {
         .ok_or_else(|| Error::new(std::io::ErrorKind::InvalidInput, "missing command"))?;
     if cmd == "eval" {
         return engine::execute_command(ExecutionRequest::new(
-            cmd.to_owned(),
-            Command {
-                kind: TemplateShell,
-                cmd: CommandKind::Args(args.to_vec()),
-            },
-            args.to_vec(),
+            Command::new(TemplateShell, args.join(" ")),
+            Vec::new(),
         ));
     }
     Err(Error::new(
@@ -80,9 +79,15 @@ pub fn help() -> String {
 
     writeln!(
         out,
-        "  {command}app{command:#}       [builtin] -- application level commands"
+        "\n  {command}app{command:#}       [builtin] -- application level commands"
     )
     .unwrap();
-
     out
+}
+
+pub fn format_cmd_type(cmd: &Command) -> String {
+    match cmd.kind {
+        ExecutionMode::Shell => "[shell]".to_string(),
+        ExecutionMode::TemplateShell => "[template_shell]".to_string(),
+    }
 }

@@ -50,7 +50,7 @@ fn load_merged_config() -> Config {
         if let Some(profile_cfg) = load_profile(name) {
             resolved.merge(profile_cfg);
         } else {
-            log::warn!("Profile '{}' specified, but profile file not found", name);
+            eprintln!("Profile '{}' specified, but profile file not found", name);
         }
     }
 
@@ -80,7 +80,7 @@ fn load_file(path: &Path) -> Option<Config> {
     match toml::from_str(&content) {
         Ok(cfg) => Some(cfg),
         Err(e) => {
-            log::error!("Failed to parse config file {:?}: {}", path, e);
+            eprintln!("Failed to parse config file {:?}: {}", path, e);
             None
         }
     }

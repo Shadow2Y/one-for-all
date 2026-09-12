@@ -5,18 +5,16 @@ pub struct ExecutionRequest {
     pub verbose: bool,
     pub interpolate: bool,
     pub cmd: Command,
-    pub name: String,
     pub args: Vec<String>,
 }
 
 impl ExecutionRequest {
-    pub fn new(name: String, cmd: Command, args: Vec<String>) -> Self {
+    pub fn new(cmd: Command, args: Vec<String>) -> Self {
         ExecutionRequest {
             dry_run: false,
             verbose: false,
             interpolate: false,
             cmd: cmd,
-            name: name,
             args: args,
         }
     }

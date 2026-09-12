@@ -68,7 +68,6 @@ pub fn resolve_variable(variable: &Variable) -> Result<String, Error> {
         Variable::Provided(provider) => {
             // Providers run in an isolated scope — no local vars bleed in.
             let output = crate::engine::execute_command(ExecutionRequest::new(
-                String::new(),
                 provider.run.to_owned(),
                 Vec::new(),
             ));

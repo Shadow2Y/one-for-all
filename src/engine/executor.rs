@@ -3,63 +3,51 @@ use std::process::{Command as ProcessCommand, ExitStatus};
 use std::{collections::HashMap, process::Output};
 
 use crate::models::request::ExecutionRequest;
-use crate::{
-    config,
-    engine::resolver,
-    models::command::{CommandKind, ExecutionMode},
-};
+use crate::{config, engine::resolver, models::command::ExecutionMode};
 
 // ── Internal dispatcher ───────────────────────────────────────────────────────
 
 pub fn execute_command(mut request: ExecutionRequest) -> Result<Output> {
-    match &request.cmd.cmd {
-        CommandKind::Script(script) => run(script, &request, &HashMap::new()),
+    let func = &request.cmd;
+    if request.args.len() < func.params.len() {
+        let missing_params: Vec<&str> = func.params[request.args.len()..]
+            .iter()
+            .filter(|name| !func.defaults.contains_key(*name))
+            .map(String::as_str)
+            .collect();
 
-        CommandKind::Args(parts) => run(&parts.join(" "), &request, &HashMap::new()),
-
-        CommandKind::Parameterized(func) => {
-            if request.args.len() < func.params.len() {
-                for name in &func.params[request.args.len()..] {
-                    if !func.defaults.contains_key(name) {
-                        return Err(Error::new(
-                            ErrorKind::InvalidInput,
-                            format!("Missing required parameter: {name}"),
-                        ));
-                    }
-                }
-            }
-
-            if !func.allow_trailing_args {
-                request.args.truncate(func.params.len());
-            }
-
-            let params: HashMap<&str, &str> = func
-                .params
-                .iter()
-                .enumerate()
-                .map(|(index, name)| {
-                    let value = request
-                        .args
-                        .get(index)
-                        .map(String::as_str)
-                        .or_else(|| func.defaults.get(name).map(String::as_str))
-                        .expect("parameter was validated above");
-
-                    (name.as_str(), value)
-                })
-                .collect();
-
-            run(&func.run, &request, &params)
+        if !missing_params.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!(
+                    "Missing required parameter :: [ {} ]",
+                    missing_params.join(", ")
+                ),
+            ));
         }
-
-        CommandKind::Group(children) => Err(Error::new(
-            ErrorKind::Unsupported,
-            format!(
-                "Cannot execute a command group directly — subcommand required. Available: {:?}",
-                children.keys().collect::<Vec<_>>()
-            ),
-        )),
     }
+
+    if !func.allow_trailing_args {
+        request.args.truncate(func.params.len());
+    }
+
+    let params: HashMap<&str, &str> = func
+        .params
+        .iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let value = request
+                .args
+                .get(index)
+                .map(String::as_str)
+                .or_else(|| func.defaults.get(name).map(String::as_str))
+                .expect("parameter was validated above");
+
+            (name.as_str(), value)
+        })
+        .collect();
+
+    run(&func.cmd, &request, &params)
 }
 
 // ── Execution modes ───────────────────────────────────────────────────────────

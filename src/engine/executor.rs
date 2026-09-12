@@ -1,5 +1,5 @@
 use std::io::{Error, ErrorKind, Result};
-use std::process::{Command as ProcessCommand, ExitStatus};
+use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
 use std::{collections::HashMap, process::Output};
 
 use crate::models::request::ExecutionRequest;
@@ -76,9 +76,20 @@ fn execute(script: &str, request: &ExecutionRequest) -> Result<Output> {
     if request.verbose {
         println!("Executing :: {script}")
     }
+
     ProcessCommand::new("sh")
         .arg("-c")
         .arg(script)
+        .stdout(if request.queit {
+            Stdio::null()
+        } else {
+            Stdio::inherit()
+        })
+        .stderr(if request.queit {
+            Stdio::null()
+        } else {
+            Stdio::inherit()
+        })
         .arg("--")
         .args(request.args.to_owned())
         .envs(config::get().env.clone())

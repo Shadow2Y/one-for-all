@@ -22,6 +22,10 @@ struct CLI {
     dry_run: bool,
 
     /// Verbose mode -- write extra information regarding the current execution
+    #[arg(short = 'q', long, global = true)]
+    quiet: bool,
+
+    /// Verbose mode -- write extra information regarding the current execution
     #[arg(short = 'v', long, global = true)]
     verbose: bool,
 
@@ -53,6 +57,7 @@ fn main() -> Result<()> {
                 .clone();
 
             engine::run(ExecutionRequest {
+                queit: cli.quiet,
                 dry_run: cli.dry_run,
                 verbose: cli.verbose,
                 interpolate: cli.interpolate,

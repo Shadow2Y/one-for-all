@@ -4,3 +4,6 @@ env.var = "This is a env var"
 
 [commands.say-hello]
 cmd = "echo {{ hey }}"
+
+[commands.install]
+cmd = "cargo install --path ."

@@ -34,7 +34,7 @@ pub fn profiles_dir() -> PathBuf {
 /// Loads and resolves global config, profile config, and local repo config in order:
 /// 1. Global config (~/.config/ofa/global.toml)
 /// 2. Profile config (~/.config/ofa/profiles/<name>.toml) if specified
-/// 3. Local repo config (.ofa.toml or ofa.toml)
+/// 3. Local repo config (.ofa.toml)
 fn load_merged_config() -> Config {
     let mut resolved = load_file(&global_config_path()).unwrap_or_default();
 
@@ -94,14 +94,9 @@ pub fn find_local_config() -> Option<PathBuf> {
         if dot_ofa.is_file() {
             return Some(dot_ofa);
         }
-        let ofa = curr.join("ofa.toml");
-        if ofa.is_file() {
-            return Some(ofa);
-        }
         if !curr.pop() {
             break;
         }
     }
     None
 }
-

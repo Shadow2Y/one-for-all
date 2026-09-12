@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Error};
 use crate::{
     config,
     engine::tokenizer::{Template, TemplatePart},
-    models::variable::Variable,
+    models::{request::ExecutionRequest, variable::Variable},
 };
 
 // ── Template resolution ───────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ use crate::{
 /// inline and resolution stays deterministic across concurrent executions.
 pub fn render_template(
     template: &Template,
-    local_vars: &HashMap<String, String>,
+    local_vars: &HashMap<&str, &str>,
 ) -> Result<String, Error> {
     let mut out = String::new();
     for part in &template.parts {
@@ -31,7 +31,7 @@ pub fn render_template(
 }
 
 /// Convenience wrapper: parse `text` into a [`Template`] then render it.
-pub fn render_text(text: &str, local_vars: &HashMap<String, String>) -> Result<String, Error> {
+pub fn render_text(text: &str, local_vars: &HashMap<&str, &str>) -> Result<String, Error> {
     render_template(&Template::parse(text)?, local_vars)
 }
 
@@ -39,10 +39,10 @@ pub fn render_text(text: &str, local_vars: &HashMap<String, String>) -> Result<S
 
 /// Resolves a named variable following the layered lookup order described in
 /// [`resolve_expr`].
-fn resolve_var(name: &str, local_vars: &HashMap<String, String>) -> Result<String, Error> {
+fn resolve_var(name: &str, local_vars: &HashMap<&str, &str>) -> Result<String, Error> {
     // 1. Call-local scope (e.g. parameterised command arguments)
     if let Some(v) = local_vars.get(name) {
-        return Ok(v.clone());
+        return Ok(v.to_string());
     }
 
     // 3. Config [vars] table — may be a literal value or a provider command
@@ -67,7 +67,11 @@ pub fn resolve_variable(variable: &Variable) -> Result<String, Error> {
         Variable::Literal(v) => Ok(v.clone()),
         Variable::Provided(provider) => {
             // Providers run in an isolated scope — no local vars bleed in.
-            let output = crate::engine::execute_command(&provider.run, &[]);
+            let output = crate::engine::execute_command(ExecutionRequest::new(
+                String::new(),
+                provider.run.to_owned(),
+                Vec::new(),
+            ));
             Ok(String::from_utf8_lossy(&output?.stdout).into_owned())
         }
     }

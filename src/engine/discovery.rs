@@ -1,77 +1,40 @@
 use std::collections::HashMap;
 
-use crate::{
-    config,
-    models::command::{Command, CommandKind, ExecutionMode},
-};
+use crate::models::command::{Command, CommandKind, ExecutionMode};
 
-/// Formats and lists all available base commands from resolved configuration.
-pub fn list_base_commands() -> String {
-    let cfg = config::get();
+pub fn list_group_subcommands(group_path: &str, children: &HashMap<String, Command>) -> String {
     let mut out = String::new();
 
-    out.push_str("ofa - The one CLI tool to orchestrate them all\n");
+    out.push_str(&format!("'{}' is a command group.\n\n", group_path));
+    out.push_str("Commands:\n");
 
-    if let Some(ref profile) = cfg.profile {
-        out.push_str(&format!("\nActive Profile: {}\n", profile));
-    } else {
-        out.push_str("\nActive Profile: none\n");
-    }
-
-    if let Some(local_path) = config::find_local_config() {
-        out.push_str(&format!("Local Config: {}\n", local_path.display()));
-    }
-
-    out.push_str("\nAvailable Commands:\n");
-
-    let mut keys: Vec<&String> = cfg.commands.keys().collect();
+    let mut keys: Vec<&String> = children.keys().collect();
     keys.sort();
 
     if keys.is_empty() {
         out.push_str("  (no commands configured)\n");
     } else {
         for key in keys {
-            if let Some(cmd) = cfg.commands.get(key) {
-                out.push_str(&format!("  {:20} {}\n", key, format_cmd_type(cmd)));
-            }
-        }
-    }
-
-    out.push_str(&format!("  {:20} [builtin]\n", "app"));
-
-    out.push_str("\nUsage:\n");
-    out.push_str("  ofa <command> [args...]\n");
-
-    out
-}
-
-/// Formats available subcommands for a command group.
-pub fn list_group_subcommands(group_path: &str, children: &HashMap<String, Command>) -> String {
-    let mut out = String::new();
-
-    out.push_str(&format!("'{}' is a command group.\n\n", group_path));
-    out.push_str(&format!("Available Subcommands for '{}':\n", group_path));
-
-    let mut keys: Vec<&String> = children.keys().collect();
-    keys.sort();
-
-    if keys.is_empty() {
-        out.push_str("  (no subcommands in group)\n");
-    } else {
-        for key in keys {
             if let Some(cmd) = children.get(key) {
-                out.push_str(&format!("  {:20} {}\n", key, format_cmd_type(cmd)));
+                out.push_str(&format!("  {:10} {}\n", key, format_cmd_type(cmd)));
             }
         }
     }
 
-    out.push_str("\nUsage:\n");
-    out.push_str(&format!("  ofa {} <subcommand> [args...]\n", group_path));
+    out.push_str(&format!(
+        "\nUsage: ofa {} <command> [args...]\n",
+        group_path
+    ));
+
+    out.push_str(&format!(
+        "\nRun 'ofa {} <command> --help' for command-specific help.\n",
+        group_path
+    ));
 
     out
 }
 
-fn format_cmd_type(cmd: &Command) -> String {
+pub fn format_cmd_type(cmd: &Command) -> String {
     match &cmd.cmd {
         CommandKind::Group(children) => {
             format!("[group] ({} subcommands)", children.len())

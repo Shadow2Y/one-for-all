@@ -1,4 +1,3 @@
-use super::function::Function;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -7,7 +6,16 @@ pub struct Command {
     #[serde(rename = "type")]
     pub kind: ExecutionMode,
 
-    pub cmd: CommandKind,
+    pub cmd: String,
+
+    #[serde(default)]
+    pub params: Vec<String>,
+
+    #[serde(default)]
+    pub defaults: HashMap<String, String>,
+
+    #[serde(default)]
+    pub allow_trailing_args: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -15,13 +23,4 @@ pub struct Command {
 pub enum ExecutionMode {
     Shell,
     TemplateShell,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum CommandKind {
-    Script(String),
-    Args(Vec<String>),
-    Parameterized(Function),
-    Group(HashMap<String, Command>),
 }

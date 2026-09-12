@@ -1,6 +1,6 @@
 # One For All
 
-**One For All (OFA)** is a lightweight CLI tool for defining reusable command macros and orchestrating shell commands through a simple TOML configuration.
+**One For All (ofa)** is a lightweight CLI tool for defining reusable command macros and orchestrating shell commands through a simple TOML configuration.
 
 Instead of maintaining multiple shell scripts, OFA lets you define commands, functions, parameters, defaults, and templates in one configuration file.
 
@@ -25,9 +25,9 @@ run = "cargo build --release"
 [commands.test]
 run = "cargo test"
 
-[functions.deploy]
-run = "docker compose up -d {{ service }}"
+[commands.deploy]
 params = ["service"]
+run = "docker compose up -d {{ service }}"
 ```
 
 Run commands with:
@@ -49,13 +49,13 @@ OFA uses a TOML configuration file located at:
 Commands and functions can be defined with parameters and optional defaults:
 
 ```toml
-[functions.run]
-run = "docker run {{ image }}"
+[commands.run]
 params = ["image"]
+run = "docker run {{ image }}"
 
-[functions.logs]
-run = "docker logs -f {{ container }}"
+[commands.logs]
 params = ["container"]
+run = "docker logs -f {{ container }}"
 ```
 
 ## Usage
@@ -68,8 +68,8 @@ Useful options include:
 
 ```text
 --dry-run       Show commands without executing them
---verbose       Enable verbose output
---interpolate   Enable variable interpolation
+--verbose       Enable verbose output, print the command before execution
+--interpolate   Enable variable interpolation, for dry-run whether to interpolate env vars.
 ```
 
 Run:

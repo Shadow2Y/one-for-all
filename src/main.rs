@@ -18,15 +18,15 @@ mod models;
 )]
 struct CLI {
     /// Dry run mode -- print the resultant script without executing it
-    #[arg(long, global = true)]
+    #[arg(short = 'd', long, global = true)]
     dry_run: bool,
 
     /// Verbose mode -- write extra information regarding the current execution
-    #[arg(long, global = true)]
+    #[arg(short = 'v', long, global = true)]
     verbose: bool,
 
     /// Variable interpolation --
-    #[arg(long, global = true)]
+    #[arg(short = 'i', long, global = true, default_value_t = true)]
     interpolate: bool,
 
     /// Everything else (command + arguments)

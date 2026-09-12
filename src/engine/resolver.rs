@@ -52,7 +52,7 @@ fn resolve_var(name: &str, local_vars: &HashMap<&str, &str>) -> Result<String, E
 
     Err(Error::new(
         std::io::ErrorKind::NotFound,
-        format!("Undefined variable '@{name}'"),
+        format!("Undefined variable '{name}'"),
     ))
 }
 

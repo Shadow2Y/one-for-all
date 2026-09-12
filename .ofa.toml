@@ -1,0 +1,6 @@
+vars.hey = "Hello!"
+
+env.var = "This is a env var"
+
+[commands.say-hello]
+cmd = "echo {{ hey }}"

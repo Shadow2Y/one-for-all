@@ -14,6 +14,65 @@ Instead of maintaining multiple shell scripts, OFA lets you define commands, fun
 * Simple TOML-based configuration
 * No runtime or external service dependencies
 
+## Installation
+
+### Build from source
+
+OFA requires the Rust toolchain to build from source.
+
+Clone the repository and build the release binary:
+
+```bash
+git clone <repository-url>
+cd ofa
+
+cargo build --release
+```
+
+The binary will be available at:
+
+```text
+target/release/ofa
+```
+
+Install it to `/usr/local/bin`:
+
+```bash
+sudo install -m 755 target/release/ofa /usr/local/bin/ofa
+```
+
+Verify:
+
+```bash
+ofa --version
+```
+
+### Configuration
+
+After installation, create the OFA configuration directory:
+
+```bash
+mkdir -p ~/.config/ofa
+```
+
+Create the `global` configuration file:
+
+```bash
+touch ~/.config/ofa/global.toml
+```
+
+In a similar fashion create the `local` configuration file: `.ofa.toml` and optional `profile` at `~/.config/ofa/profiles/<profile-name>.toml`.
+
+OFA reads the commands and functions in the following order:
+
+`local -> profile -> global` 
+
+Configs read earlier cannot be overwritten so `local` can override `profile` which can again override `global`.
+
+```text
+~/.config/ofa/global.toml
+```
+
 ## Example
 
 Configuration:
@@ -69,7 +128,7 @@ Useful options include:
 ```text
 --dry-run       Show commands without executing them
 --verbose       Enable verbose output, print the command before execution
---interpolate   Enable variable interpolation, for dry-run whether to interpolate env vars.
+--interpolate   Enable variable interpolation; for dry-run, controls env var interpolation
 ```
 
 Run:
@@ -86,7 +145,7 @@ Shell scripts are great for simple automation, but larger collections of scripts
 
 OFA provides a small abstraction over shell commands while keeping the commands themselves simple and transparent.
 
-Useful for managing different env, reuseable vars which are better kept in local isolation.
+Useful for managing different environments and reusable variables while keeping configuration isolated to the local machine.
 
 ## License
 

@@ -80,12 +80,12 @@ fn execute(script: &str, request: &ExecutionRequest) -> Result<Output> {
     ProcessCommand::new("sh")
         .arg("-c")
         .arg(script)
-        .stdout(if request.queit {
+        .stdout(if request.quiet {
             Stdio::null()
         } else {
             Stdio::inherit()
         })
-        .stderr(if request.queit {
+        .stderr(if request.quiet {
             Stdio::null()
         } else {
             Stdio::inherit()

@@ -57,7 +57,7 @@ fn main() -> Result<()> {
                 .clone();
 
             engine::run(ExecutionRequest {
-                queit: cli.quiet,
+                quiet: cli.quiet,
                 dry_run: cli.dry_run,
                 verbose: cli.verbose,
                 interpolate: cli.interpolate,

@@ -26,19 +26,7 @@ Clone the repository and build the release binary:
 git clone <repository-url>
 cd ofa
 
-cargo build --release
-```
-
-The binary will be available at:
-
-```text
-target/release/ofa
-```
-
-Install it to `/usr/local/bin`:
-
-```bash
-sudo install -m 755 target/release/ofa /usr/local/bin/ofa
+cargo install --path .
 ```
 
 Verify:

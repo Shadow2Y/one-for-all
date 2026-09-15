@@ -14,6 +14,16 @@ Instead of maintaining multiple shell scripts, OFA lets you define commands, fun
 * Simple TOML-based configuration
 * No runtime or external service dependencies
 
+
+## Why OFA?
+
+Shell scripts are great for simple automation, but larger collections of scripts can become difficult to organize and reuse.
+
+OFA provides a small abstraction over shell commands while keeping the commands themselves simple and transparent.
+
+Useful for managing different environments and reusable variables while keeping configuration isolated to the local machine.
+
+
 ## Installation
 
 ### Build from source
@@ -126,14 +136,6 @@ ofa --help
 ```
 
 for the complete CLI interface.
-
-## Why OFA?
-
-Shell scripts are great for simple automation, but larger collections of scripts can become difficult to organize and reuse.
-
-OFA provides a small abstraction over shell commands while keeping the commands themselves simple and transparent.
-
-Useful for managing different environments and reusable variables while keeping configuration isolated to the local machine.
 
 ## License
 

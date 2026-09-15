@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::io::{Error, Result};
+use std::io::{Error, ErrorKind, Result};
 
 use crate::models::request::ExecutionRequest;
 
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
             let command = config::get()
                 .commands
                 .get(cmd)
-                .expect("Unknown command")
+                .expect("No such command found. Command should be present in any of the  effective config.")
                 .clone();
 
             engine::run(ExecutionRequest {
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
                 args,
             })
         }
-        None => panic!("Unsupported operation!"),
+        None => Err(Error::new(ErrorKind::Unsupported, "Unsupported operation!")),
     }?;
 
     print!("{}", String::from_utf8_lossy(&output.stdout));

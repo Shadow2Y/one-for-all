@@ -14,7 +14,7 @@ use crate::{
         request::ExecutionRequest,
     },
 };
-use clap::builder::styling::{AnsiColor, Effects};
+use clap::builder::styling::{Effects, Style};
 
 pub fn handle(args: &[String]) -> Result<Output> {
     let (cmd, args) = args
@@ -37,24 +37,38 @@ use std::fmt::Write;
 pub fn help() -> String {
     let cfg = config::get();
 
-    let header = AnsiColor::BrightCyan.on_default() | Effects::BOLD;
-    let command = AnsiColor::BrightGreen.on_default();
-
     let mut out = String::new();
+
+    let header = Style::new().effects(Effects::BOLD | Effects::UNDERLINE);
+    let command = Style::new().effects(Effects::BOLD);
 
     writeln!(out, "{header}Context:{header:#}").unwrap();
 
     match &cfg.profile {
         Some(profile) => {
-            writeln!(out, "  {:10} {}", "Profile:", profile).unwrap();
+            writeln!(out, "  {command}{:10}{command:#} {}", "Profile:", profile).unwrap();
         }
         None => {
-            writeln!(out, "  {:10} <none>", "Profile:").unwrap();
+            writeln!(out, "  {command}{:10}{command:#} <none>", "Profile:").unwrap();
         }
     }
 
+    writeln!(
+        out,
+        "  {command}{:10}{command:#} {:?}",
+        "Config dir:",
+        config::config_dir()
+    )
+    .unwrap();
+
     if let Some(local_path) = config::find_local_config() {
-        writeln!(out, "  {:10} {}", "Config:", local_path.display()).unwrap();
+        writeln!(
+            out,
+            "  {command}{:10}{command:#} {}",
+            "Config:",
+            local_path.display()
+        )
+        .unwrap();
     }
 
     writeln!(out, "\n{header}Commands:{header:#}").unwrap();
@@ -63,7 +77,7 @@ pub fn help() -> String {
     keys.sort();
 
     if keys.is_empty() {
-        writeln!(out, "  (no commands configured)").unwrap();
+        writeln!(out, "  {command}(no commands configured){command:#}").unwrap();
     } else {
         for key in keys {
             if let Some(cmd) = cfg.commands.get(key) {
@@ -79,7 +93,7 @@ pub fn help() -> String {
 
     writeln!(
         out,
-        "\n  {command}app{command:#}       [builtin] -- application level commands"
+        "{command}app{command:#}       [builtin] -- application level commands"
     )
     .unwrap();
     out

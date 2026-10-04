@@ -31,6 +31,10 @@ pub fn profiles_dir() -> PathBuf {
     config_dir().join("profiles")
 }
 
+pub fn pid_dir() -> PathBuf {
+    config_dir().join(".pids")
+}
+
 /// Loads and resolves global config, profile config, and local repo config in order:
 /// 1. Global config (~/.config/ofa/global.toml)
 /// 2. Profile config (~/.config/ofa/profiles/<name>.toml) if specified

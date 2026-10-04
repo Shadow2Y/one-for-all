@@ -1,6 +1,9 @@
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs::OpenOptions;
+use std::io::Write;
 use std::io::{Error, ErrorKind, Result};
+use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Output, Stdio};
 
 use crate::models::request::ExecutionRequest;
@@ -129,18 +132,27 @@ fn spawn_detached(mut cmd: Command, quiet: bool) -> Result<Output> {
 
     #[cfg(unix)]
     {
+        use std::env;
+
+        use crate::config::pid_dir;
+
         unsafe {
             cmd.pre_exec(|| {
                 libc::setsid();
                 Ok(())
             });
         }
-        let process = cmd.spawn()?.id();
-        println!("PID :: {process}");
+        let process_id = cmd.spawn()?.id();
+        let pid_path = pid_dir();
+        persist_pid(&process_id, cmd.get_args(), &env::current_dir()?, &pid_path)?;
+        println!(
+            "Spawned process with PID :: {process_id} :: appended to file :: {:?}",
+            pid_path
+        );
 
         Ok(Output {
             status: std::process::ExitStatus::from_raw(0),
-            stdout: Vec::new(),
+            stdout: process_id.to_string().into_bytes(),
             stderr: Vec::new(),
         })
     }
@@ -149,6 +161,25 @@ fn spawn_detached(mut cmd: Command, quiet: bool) -> Result<Output> {
     Err(anyhow::anyhow!(
         "nohup mode is only supported on Unix systems"
     ))
+}
+
+fn persist_pid<'a>(
+    pid: &u32,
+    args: impl Iterator<Item = &'a OsStr>,
+    current_dir: &PathBuf,
+    persist_dir: &PathBuf,
+) -> std::io::Result<()> {
+    let args_str: Vec<String> = args.map(|arg| arg.to_string_lossy().into_owned()).collect();
+
+    let command_line = args_str.join(" ");
+
+    let mut pid_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(persist_dir)?;
+
+    writeln!(pid_file, "{pid}\t{current_dir:?}\t{command_line}")?;
+    Ok(())
 }
 
 fn execute_dry(script: &str, request: &ExecutionRequest) -> Result<Output> {

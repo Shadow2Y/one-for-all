@@ -25,6 +25,10 @@ struct CLI {
     #[arg(short = 'q', long, global = true)]
     quiet: bool,
 
+    /// nohup mode -- detached shell that executes in a nohup mode
+    #[arg(short = 'n', long, global = true)]
+    nohup: bool,
+
     /// Verbose mode -- write extra information regarding the current execution
     #[arg(short = 'v', long, global = true)]
     verbose: bool,
@@ -58,6 +62,7 @@ fn main() -> Result<()> {
 
             engine::run(ExecutionRequest {
                 quiet: cli.quiet,
+                nohup: cli.nohup,
                 dry_run: cli.dry_run,
                 verbose: cli.verbose,
                 interpolate: cli.interpolate,

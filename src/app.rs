@@ -46,16 +46,16 @@ pub fn help() -> String {
 
     match &cfg.profile {
         Some(profile) => {
-            writeln!(out, "  {command}{:10}{command:#} {}", "Profile:", profile).unwrap();
+            writeln!(out, "  {command}{:10}{command:#} \t{}", "Profile:", profile).unwrap();
         }
         None => {
-            writeln!(out, "  {command}{:10}{command:#} <none>", "Profile:").unwrap();
+            writeln!(out, "  {command}{:10}{command:#} \t<none>", "Profile:").unwrap();
         }
     }
 
     writeln!(
         out,
-        "  {command}{:10}{command:#} {:?}",
+        "  {command}{:10}{command:#} \t{:?}",
         "Config dir:",
         config::config_dir()
     )
@@ -64,8 +64,8 @@ pub fn help() -> String {
     if let Some(local_path) = config::find_local_config() {
         writeln!(
             out,
-            "  {command}{:10}{command:#} {}",
-            "Config:",
+            "  {command}{:10}{command:#} \t{}",
+            "Local:",
             local_path.display()
         )
         .unwrap();
@@ -76,6 +76,7 @@ pub fn help() -> String {
     let mut keys: Vec<&String> = cfg.commands.keys().collect();
     keys.sort();
 
+    writeln!(out, "{command}  app{command:#}  \t\t[builtin]").unwrap();
     if keys.is_empty() {
         writeln!(out, "  {command}(no commands configured){command:#}").unwrap();
     } else {
@@ -83,19 +84,13 @@ pub fn help() -> String {
             if let Some(cmd) = cfg.commands.get(key) {
                 writeln!(
                     out,
-                    "  {command}{key}{command:#} {:>}",
+                    "  {command}{key}{command:#} \t{:>}",
                     format_cmd_type(cmd),
                 )
                 .unwrap();
             }
         }
     }
-
-    writeln!(
-        out,
-        "{command}app{command:#}       [builtin] -- application level commands"
-    )
-    .unwrap();
     out
 }
 

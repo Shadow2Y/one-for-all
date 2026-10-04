@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Result};
-use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
-use std::{collections::HashMap, process::Output};
+use std::process::{Command, ExitStatus, Output, Stdio};
 
 use crate::models::request::ExecutionRequest;
 use crate::{config, engine::resolver, models::command::ExecutionMode};
@@ -69,31 +70,85 @@ fn run(
     }
 }
 
-fn execute(script: &str, request: &ExecutionRequest) -> Result<Output> {
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+
+pub fn execute(script: &str, request: &ExecutionRequest) -> Result<Output> {
     if request.dry_run {
         return execute_dry(script, request);
     }
     if request.verbose {
-        println!("Executing :: {script}")
+        println!("Executing :: {script}");
     }
 
-    ProcessCommand::new("sh")
-        .arg("-c")
-        .arg(script)
-        .stdout(if request.quiet {
-            Stdio::null()
-        } else {
-            Stdio::inherit()
-        })
-        .stderr(if request.quiet {
-            Stdio::null()
-        } else {
-            Stdio::inherit()
-        })
-        .arg("--")
-        .args(request.args.to_owned())
-        .envs(config::get().env.clone())
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c").arg(script);
+
+    if !request.args.is_empty() {
+        cmd.arg("--").args(&request.args);
+    }
+    cmd.envs(config::get().env.clone());
+
+    if request.nohup {
+        spawn_detached(cmd, request.quiet)
+    } else {
+        spawn_attached(cmd, request.quiet)
+    }
+}
+
+fn spawn_attached(mut cmd: Command, quiet: bool) -> Result<Output> {
+    let (stdout, stderr) = if quiet {
+        (Stdio::null(), Stdio::null())
+    } else {
+        (Stdio::inherit(), Stdio::inherit())
+    };
+
+    cmd.stdout(stdout)
+        .stderr(stderr)
         .output()
+        .map_err(Into::into)
+}
+
+fn spawn_detached(mut cmd: Command, quiet: bool) -> Result<Output> {
+    let (stdout, stderr) = if quiet {
+        (Stdio::null(), Stdio::null())
+    } else {
+        let out_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("nohup.out")?;
+        let err_file = out_file.try_clone()?;
+
+        (Stdio::from(out_file), Stdio::from(err_file))
+    };
+
+    cmd.stdin(Stdio::null()).stdout(stdout).stderr(stderr);
+
+    #[cfg(unix)]
+    {
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+        let process = cmd.spawn()?.id();
+        println!("PID :: {process}");
+
+        Ok(Output {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        })
+    }
+
+    #[cfg(not(unix))]
+    Err(anyhow::anyhow!(
+        "nohup mode is only supported on Unix systems"
+    ))
 }
 
 fn execute_dry(script: &str, request: &ExecutionRequest) -> Result<Output> {

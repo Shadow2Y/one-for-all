@@ -2,6 +2,7 @@ use crate::models::command::Command;
 
 pub struct ExecutionRequest {
     pub quiet: bool,
+    pub nohup: bool,
     pub dry_run: bool,
     pub verbose: bool,
     pub interpolate: bool,
@@ -13,6 +14,7 @@ impl ExecutionRequest {
     pub fn new(cmd: Command, args: Vec<String>) -> Self {
         ExecutionRequest {
             quiet: false,
+            nohup: false,
             dry_run: false,
             verbose: false,
             interpolate: false,

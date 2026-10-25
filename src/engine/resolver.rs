@@ -65,6 +65,8 @@ fn resolve_var(name: &str, local_vars: &HashMap<&str, &str>) -> Result<String, E
 pub fn resolve_variable(variable: &Variable) -> Result<String, Error> {
     match variable {
         Variable::Literal(v) => Ok(v.clone()),
+        Variable::Float(v) => Ok(v.to_string()),
+        Variable::Int(v) => Ok(v.to_string()),
         Variable::Provided(provider) => {
             // Providers run in an isolated scope — no local vars bleed in.
             let output = crate::engine::execute_command(ExecutionRequest::new(

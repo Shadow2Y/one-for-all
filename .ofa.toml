@@ -1,4 +1,4 @@
-vars.hey = "Hello!"
+vars.hey = "$HOME"
 
 env.var = "This is a env var"
 

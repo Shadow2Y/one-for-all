@@ -9,6 +9,8 @@ use std::process::{Command, ExitStatus, Output, Stdio};
 use crate::models::request::ExecutionRequest;
 use crate::{config, engine::resolver, models::command::ExecutionMode};
 
+static NOHUP_DIR: &str = "nohup.out";
+
 // ── Internal dispatcher ───────────────────────────────────────────────────────
 
 pub fn execute_command(mut request: ExecutionRequest) -> Result<Output> {
@@ -80,11 +82,20 @@ use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 
 pub fn execute(script: &str, request: &ExecutionRequest) -> Result<Output> {
+    let envs = config::get().env.clone();
+    let script = if request.interpolate {
+        interpolate(script, &envs)
+    } else {
+        script.to_owned()
+    };
     if request.dry_run {
-        return execute_dry(script, request);
+        return execute_dry(&script, request);
     }
     if request.verbose {
         println!("Executing :: {script}");
+    }
+    if request.expose_env {
+        println!("{}\n", formatted_env());
     }
 
     let mut cmd = Command::new("sh");
@@ -93,7 +104,7 @@ pub fn execute(script: &str, request: &ExecutionRequest) -> Result<Output> {
     if !request.args.is_empty() {
         cmd.arg("--").args(&request.args);
     }
-    cmd.envs(config::get().env.clone());
+    cmd.envs(envs);
 
     if request.nohup {
         spawn_detached(cmd, request.quiet)
@@ -122,7 +133,7 @@ fn spawn_detached(mut cmd: Command, quiet: bool) -> Result<Output> {
         let out_file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open("nohup.out")?;
+            .open(NOHUP_DIR)?;
         let err_file = out_file.try_clone()?;
 
         (Stdio::from(out_file), Stdio::from(err_file))
@@ -146,7 +157,7 @@ fn spawn_detached(mut cmd: Command, quiet: bool) -> Result<Output> {
         let pid_path = pid_dir();
         persist_pid(&process_id, cmd.get_args(), &env::current_dir()?, &pid_path)?;
         println!(
-            "Spawned process with PID :: {process_id} :: appended to file :: {:?}",
+            "PID :: {process_id} :: PID-history :: {:?} :: output-dir :: {NOHUP_DIR}\n",
             pid_path
         );
 
@@ -183,17 +194,27 @@ fn persist_pid<'a>(
 }
 
 fn execute_dry(script: &str, request: &ExecutionRequest) -> Result<Output> {
-    let script = if request.interpolate {
-        interpolate(script, &config::get().env)
+    let output: String;
+    if request.expose_env {
+        let env_str = formatted_env();
+        output = format!("{env_str} {script}\n");
     } else {
-        script.to_owned()
-    };
-
+        output = format!("{script}\n");
+    }
     Ok(Output {
         status: ExitStatus::default(),
-        stdout: format!("{script}\n").into_bytes(),
+        stdout: output.into_bytes(),
         stderr: Vec::new(),
     })
+}
+
+fn formatted_env() -> String {
+    config::get()
+        .env
+        .iter()
+        .map(|(k, v)| format!("{}='{}'", k, v))
+        .collect::<Vec<String>>()
+        .join(" ")
 }
 
 fn interpolate(input: &str, env: &HashMap<String, String>) -> String {

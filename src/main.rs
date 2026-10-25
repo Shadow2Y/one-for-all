@@ -33,6 +33,10 @@ struct CLI {
     #[arg(short = 'v', long, global = true)]
     verbose: bool,
 
+    /// Verbose mode -- write extra information regarding the current execution
+    #[arg(short = 'e', long, global = true)]
+    expose_env: bool,
+
     /// Variable interpolation --
     #[arg(short = 'i', long, global = true, default_value_t = true)]
     interpolate: bool,
@@ -65,6 +69,7 @@ fn main() -> Result<()> {
                 nohup: cli.nohup,
                 dry_run: cli.dry_run,
                 verbose: cli.verbose,
+                expose_env: cli.expose_env,
                 interpolate: cli.interpolate,
                 cmd: command,
                 args,

@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub enum Variable {
     Provided(Provider),
     Literal(String),
+    Float(f32),
+    Int(i32),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

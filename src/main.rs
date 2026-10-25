@@ -21,11 +21,11 @@ struct CLI {
     #[arg(short = 'd', long, global = true)]
     dry_run: bool,
 
-    /// Verbose mode -- write extra information regarding the current execution
+    /// Quiet mode -- silence the subsequent process's stdout/stderr
     #[arg(short = 'q', long, global = true)]
     quiet: bool,
 
-    /// nohup mode -- detached shell that executes in a nohup mode
+    /// nohup mode -- detach the current execution pipes to nohup
     #[arg(short = 'n', long, global = true)]
     nohup: bool,
 
@@ -33,9 +33,9 @@ struct CLI {
     #[arg(short = 'v', long, global = true)]
     verbose: bool,
 
-    /// Verbose mode -- write extra information regarding the current execution
+    /// Expose mode -- expose all the configured env before execution
     #[arg(short = 'e', long, global = true)]
-    expose_env: bool,
+    expose: bool,
 
     /// Variable interpolation --
     #[arg(short = 'i', long, global = true, default_value_t = true)]
@@ -69,7 +69,7 @@ fn main() -> Result<()> {
                 nohup: cli.nohup,
                 dry_run: cli.dry_run,
                 verbose: cli.verbose,
-                expose_env: cli.expose_env,
+                expose: cli.expose,
                 interpolate: cli.interpolate,
                 cmd: command,
                 args,

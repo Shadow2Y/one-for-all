@@ -94,7 +94,7 @@ pub fn execute(script: &str, request: &ExecutionRequest) -> Result<Output> {
     if request.verbose {
         println!("Executing :: {script}");
     }
-    if request.expose_env {
+    if request.expose {
         println!("{}\n", formatted_env());
     }
 
@@ -195,7 +195,7 @@ fn persist_pid<'a>(
 
 fn execute_dry(script: &str, request: &ExecutionRequest) -> Result<Output> {
     let output: String;
-    if request.expose_env {
+    if request.expose {
         let env_str = formatted_env();
         output = format!("{env_str} {script}\n");
     } else {
